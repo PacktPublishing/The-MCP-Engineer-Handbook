@@ -1,0 +1,17 @@
+{
+  "name": "demo-resource-server",
+  "version": "0.1.0",
+  "description": "Shared demo server for the chapter 3 client samples (resources, links, templates)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0-beta.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}

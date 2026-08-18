@@ -1,0 +1,17 @@
+{
+  "name": "resource-client-host",
+  "version": "0.1.0",
+  "description": "User-controlled context injection for resources (Chapter 3, §3.3.1)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/host.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0-beta.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}

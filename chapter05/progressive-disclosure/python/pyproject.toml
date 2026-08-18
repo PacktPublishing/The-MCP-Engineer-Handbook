@@ -1,0 +1,11 @@
+[project]
+name = "progressive-disclosure"
+version = "1.0.0"
+description = "Progressive disclosure over a document-management API (Chapter 5)"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp==2.0.0b1",
+]
+
+[tool.uv]
+prerelease = "allow"

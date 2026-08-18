@@ -1,0 +1,11 @@
+[project]
+name = "task-injection"
+version = "0.1.0"
+description = "Task-injection strategies for long-running operations (Chapter 6, §6.2.11)"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp==2.0.0b1",
+]
+
+[tool.uv]
+prerelease = "allow"

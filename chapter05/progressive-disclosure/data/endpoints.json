@@ -1,0 +1,601 @@
+{
+  "api": "document-management-api",
+  "version": "1.0.0",
+  "groups": [
+    { "name": "Documents", "description": "Create, read, update, delete, and search documents." },
+    { "name": "Users", "description": "Look up users and their group memberships." },
+    { "name": "Groups", "description": "Look up groups and manage group membership." },
+    { "name": "Permissions", "description": "Manage and inspect permission grants on documents." },
+    { "name": "Versions", "description": "Browse, compare, and restore document versions." }
+  ],
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "group": "Documents",
+      "summary": "List documents with optional owner filter and pagination",
+      "description": "Returns metadata for all documents, ordered by last update (newest first). Supports filtering by owner and offset-based pagination. Only metadata is returned; use GET /api/documents/{id} to retrieve a document's content.",
+      "parameters": [
+        { "name": "ownerId", "in": "query", "type": "string", "required": false, "description": "Only return documents owned by this user ID." },
+        { "name": "limit", "in": "query", "type": "integer", "required": false, "description": "Maximum number of documents to return (default 20)." },
+        { "name": "offset", "in": "query", "type": "integer", "required": false, "description": "Number of documents to skip (default 0)." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — a page of document metadata.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "title": { "type": "string" },
+                  "ownerId": { "type": "string" },
+                  "createdAt": { "type": "string", "format": "date-time" },
+                  "updatedAt": { "type": "string", "format": "date-time" }
+                }
+              }
+            },
+            "total": { "type": "integer", "description": "Total number of documents matching the filter." }
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents",
+      "group": "Documents",
+      "summary": "Create a new document with a title and initial content",
+      "description": "Creates a document owned by the calling user. The initial content is stored as version v1 with the caller as author, and the caller receives an admin grant on the document.",
+      "parameters": [],
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["title", "content"],
+          "properties": {
+            "title": { "type": "string", "description": "Document title." },
+            "content": { "type": "string", "description": "Initial document content." },
+            "tags": { "type": "array", "items": { "type": "string" }, "description": "Optional tags for categorization." }
+          }
+        }
+      },
+      "response": {
+        "description": "201 Created — metadata for the new document.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "ownerId": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "currentVersion": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/{id}",
+      "group": "Documents",
+      "summary": "Get a document's metadata and current content",
+      "description": "Returns the full document: metadata (title, owner, tags, timestamps), the current version ID, and the content of the current version.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID, e.g. \"doc-001\"." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the document.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "ownerId": { "type": "string" },
+            "tags": { "type": "array", "items": { "type": "string" } },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" },
+            "currentVersion": { "type": "string" },
+            "content": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/documents/{id}",
+      "group": "Documents",
+      "summary": "Update a document's title, content, or tags",
+      "description": "Applies a partial update to a document. At least one of title, content, or tags must be provided. A content change creates a new version with the calling user recorded as author; title and tag changes do not create a version.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." }
+      ],
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "description": "New title." },
+            "content": { "type": "string", "description": "New content; creates a new version." },
+            "tags": { "type": "array", "items": { "type": "string" }, "description": "Replacement tag list." }
+          }
+        }
+      },
+      "response": {
+        "description": "200 OK — updated document metadata, including the current version ID.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "title": { "type": "string" },
+            "updatedAt": { "type": "string", "format": "date-time" },
+            "currentVersion": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/documents/{id}",
+      "group": "Documents",
+      "summary": "Delete a document and all of its versions",
+      "description": "Permanently deletes a document, its version history, and all grants on it. This cannot be undone.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — confirmation of the deletion.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "deleted": { "type": "string", "description": "ID of the deleted document." }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/search",
+      "group": "Documents",
+      "summary": "Full-text search across document titles and content",
+      "description": "Searches document titles and content for the given terms and returns matching documents ordered by relevance. Each result carries the document ID, title, and a relevance score between 0 and 1; documents matching fewer than half of the terms are omitted. This searches stored documents, not the API itself.",
+      "parameters": [
+        { "name": "q", "in": "query", "type": "string", "required": true, "description": "Search terms to match against document titles and content." },
+        { "name": "limit", "in": "query", "type": "integer", "required": false, "description": "Maximum number of results to return (default 10)." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — matching documents, best match first.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "title": { "type": "string" },
+                  "relevance": { "type": "number", "description": "Score between 0 and 1; 1 means all terms matched." }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "group": "Users",
+      "summary": "List all users in the organization",
+      "description": "Returns the ID, display name, and email address of every user. Use GET /api/users/{id}/groups to see a user's group memberships.",
+      "parameters": [],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — all users.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "users": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "email": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/{id}",
+      "group": "Users",
+      "summary": "Get a user's profile",
+      "description": "Returns a single user's profile: ID, display name, and email address.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "User ID, e.g. \"user-001\"." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the user profile.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "email": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/{id}/groups",
+      "group": "Users",
+      "summary": "List the groups a user is a member of",
+      "description": "Returns every group the user belongs to. Group membership matters for document access: grants made to a group apply to all of its members.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "User ID." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the user's groups.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "userId": { "type": "string" },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/groups",
+      "group": "Groups",
+      "summary": "List all groups with their member counts",
+      "description": "Returns every group with its ID, name, and member count. Use GET /api/groups/{id}/members to see who is in a group.",
+      "parameters": [],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — all groups.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "memberCount": { "type": "integer" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/groups/{id}/members",
+      "group": "Groups",
+      "summary": "List the members of a group",
+      "description": "Returns the user profiles of every member of the group.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Group ID, e.g. \"grp-001\"." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the group's members.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "groupId": { "type": "string" },
+            "members": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "email": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/groups/{id}/members",
+      "group": "Groups",
+      "summary": "Add a user to a group",
+      "description": "Adds an existing user to the group. The user immediately inherits any document grants made to the group.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Group ID." }
+      ],
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["userId"],
+          "properties": {
+            "userId": { "type": "string", "description": "ID of the user to add." }
+          }
+        }
+      },
+      "response": {
+        "description": "200 OK — the updated membership.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "groupId": { "type": "string" },
+            "userId": { "type": "string" },
+            "memberCount": { "type": "integer" }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/{id}/permissions",
+      "group": "Permissions",
+      "summary": "List all permission grants on a document (users and groups)",
+      "description": "Returns every grant on the document. Each grant records a grant ID, the grantee (a user or a group, with its display name resolved), and the level: read, write, or admin. A grant made to a group applies to all of its members.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — all grants on the document.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": { "type": "string" },
+            "grants": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "grantId": { "type": "string" },
+                  "granteeType": { "type": "string", "enum": ["user", "group"] },
+                  "granteeId": { "type": "string" },
+                  "granteeName": { "type": "string" },
+                  "level": { "type": "string", "enum": ["read", "write", "admin"] }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/{id}/permissions",
+      "group": "Permissions",
+      "summary": "Grant read, write, or admin permission to a user or group",
+      "description": "Creates a grant on the document for a user or a group. A grantee holds at most one grant per document; granting again replaces the existing level. Levels are ordered read < write < admin, and each level includes the ones below it.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." }
+      ],
+      "requestBody": {
+        "contentType": "application/json",
+        "schema": {
+          "type": "object",
+          "required": ["granteeType", "granteeId", "level"],
+          "properties": {
+            "granteeType": { "type": "string", "enum": ["user", "group"], "description": "Whether the grantee is a user or a group." },
+            "granteeId": { "type": "string", "description": "ID of the user or group receiving the grant." },
+            "level": { "type": "string", "enum": ["read", "write", "admin"], "description": "Access level to grant." }
+          }
+        }
+      },
+      "response": {
+        "description": "201 Created — the new (or replaced) grant.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "grantId": { "type": "string" },
+            "documentId": { "type": "string" },
+            "granteeType": { "type": "string" },
+            "granteeId": { "type": "string" },
+            "level": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/documents/{id}/permissions/{grantId}",
+      "group": "Permissions",
+      "summary": "Revoke a specific permission grant",
+      "description": "Removes the grant identified by grantId from the document. If the grant was made to a group, all members lose the inherited access immediately. Grant IDs come from GET /api/documents/{id}/permissions.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." },
+        { "name": "grantId", "in": "path", "type": "string", "required": true, "description": "ID of the grant to revoke, e.g. \"grant-003\"." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — confirmation of the revocation.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": { "type": "string" },
+            "revoked": { "type": "string", "description": "ID of the revoked grant." }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/{id}/permissions/check",
+      "group": "Permissions",
+      "summary": "Check what access level a specific user has (direct + inherited)",
+      "description": "Resolves the effective access level a user has on a document by combining the user's direct grants with grants inherited through group membership. Returns the highest applicable level (or \"none\") together with every grant that contributed to it.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." },
+        { "name": "userId", "in": "query", "type": "string", "required": true, "description": "ID of the user whose access to check." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the user's effective access.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": { "type": "string" },
+            "userId": { "type": "string" },
+            "level": { "type": "string", "enum": ["none", "read", "write", "admin"], "description": "Highest applicable level." },
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "via": { "type": "string", "description": "\"direct\" or \"group:<name>\"." },
+                  "level": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/{id}/versions",
+      "group": "Versions",
+      "summary": "List all versions of a document with author and timestamp",
+      "description": "Returns the document's full version history, oldest first. Each entry records the version ID, the user who authored the change, and when it was created. The document's current version is marked.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the version history.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": { "type": "string" },
+            "currentVersion": { "type": "string" },
+            "versions": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "versionId": { "type": "string" },
+                  "author": {
+                    "type": "object",
+                    "properties": { "id": { "type": "string" }, "name": { "type": "string" } }
+                  },
+                  "createdAt": { "type": "string", "format": "date-time" },
+                  "note": { "type": "string", "description": "Optional change note." }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/{id}/versions/{versionId}",
+      "group": "Versions",
+      "summary": "Get the content and metadata of a specific version",
+      "description": "Returns a single version of the document, including its full content as of that version, the author, the timestamp, and the change note if one was recorded.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." },
+        { "name": "versionId", "in": "path", "type": "string", "required": true, "description": "Version ID, e.g. \"v2\"." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the version.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": { "type": "string" },
+            "versionId": { "type": "string" },
+            "author": {
+              "type": "object",
+              "properties": { "id": { "type": "string" }, "name": { "type": "string" } }
+            },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "note": { "type": "string" },
+            "content": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents/{id}/versions/compare",
+      "group": "Versions",
+      "summary": "Compare two versions of a document",
+      "description": "Compares two versions of the document and reports what changed between them: whether the content changed, the size difference, and the authors involved. Version IDs come from GET /api/documents/{id}/versions.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." },
+        { "name": "from", "in": "query", "type": "string", "required": true, "description": "Base version ID, e.g. \"v1\"." },
+        { "name": "to", "in": "query", "type": "string", "required": true, "description": "Target version ID, e.g. \"v3\"." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "200 OK — the comparison.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": { "type": "string" },
+            "from": { "type": "string" },
+            "to": { "type": "string" },
+            "contentChanged": { "type": "boolean" },
+            "sizeDelta": { "type": "integer", "description": "Character count difference (to minus from)." },
+            "authors": { "type": "array", "items": { "type": "string" }, "description": "Names of the authors of the two versions." }
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/documents/{id}/versions/{versionId}/restore",
+      "group": "Versions",
+      "summary": "Restore a document to a previous version",
+      "description": "Copies the specified version's content into a new head version authored by the calling user. The version history is preserved; restoring never alters or deletes existing versions.",
+      "parameters": [
+        { "name": "id", "in": "path", "type": "string", "required": true, "description": "Document ID." },
+        { "name": "versionId", "in": "path", "type": "string", "required": true, "description": "Version to restore, e.g. \"v1\"." }
+      ],
+      "requestBody": null,
+      "response": {
+        "description": "201 Created — the new head version.",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "documentId": { "type": "string" },
+            "restoredFrom": { "type": "string" },
+            "newVersion": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    }
+  ]
+}

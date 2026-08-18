@@ -1,0 +1,17 @@
+{
+  "name": "model-resource-client",
+  "version": "0.1.0",
+  "description": "Model-controlled resource access via tool wrappers (Chapter 3, §3.3.3)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/host.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0-beta.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}

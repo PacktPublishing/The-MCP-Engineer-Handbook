@@ -1,0 +1,23 @@
+{
+  "name": "health-dashboard",
+  "version": "0.1.0",
+  "description": "MCP Apps sample: system health dashboard (chapter 7, section 7.4)",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc && npm run build:view",
+    "build:view": "tsc -p tsconfig.view.json && esbuild src/view/dashboard.ts --bundle --format=esm --outfile=dist/view/dashboard.js && cp src/view/dashboard.html dist/view/dashboard.html",
+    "start": "node dist/server.js"
+  },
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "1.7.4",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "^3.25.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "esbuild": "^0.25.0",
+    "typescript": "^7.0.2"
+  }
+}

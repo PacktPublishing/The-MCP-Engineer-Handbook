@@ -1,0 +1,11 @@
+[project]
+name = "resource-client-host"
+version = "0.1.0"
+description = "User-controlled context injection for MCP resources (Chapter 3, §3.3.1)"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp==2.0.0b1",
+]
+
+[tool.uv]
+prerelease = "allow"

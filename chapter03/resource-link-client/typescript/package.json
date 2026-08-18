@@ -1,0 +1,17 @@
+{
+  "name": "resource-link-client",
+  "version": "0.1.0",
+  "description": "Resolving resource links, bare and hardened (Chapter 3, §3.3.4)",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/client.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "2.0.0-beta.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}
