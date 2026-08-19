@@ -50,7 +50,8 @@ cd csharp/ChannelHost && MAX_TURNS=1 dotnet run
 cat $CHANNEL_DIR/outbox.jsonl            # the scripted responder's reply, sent via the reply tool
 ```
 
-**Verified 2026-07-12**: scripted path end-to-end, and the same run against a real model
+**Verified 2026-08-19 (GA pass, ModelContextProtocol 2.0.0)**: scripted path end-to-end,
+and the same run against a real model
 (`gpt-4.1-mini`) — the model answered the user exclusively through the `reply` tool, as
 the system prompt demands ("plain output goes nowhere").
 

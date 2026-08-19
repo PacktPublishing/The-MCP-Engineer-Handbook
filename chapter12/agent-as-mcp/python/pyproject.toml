@@ -2,7 +2,10 @@
 name = "agent-as-mcp"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["agent-framework==1.11.0"]
+dependencies = ["agent-framework==1.14.0"]
 
+# Still required at the repo's GA pass: agent-framework's own dependency tree pins
+# pre-release subpackages (e.g. azure-ai-agentserver-responses>=1.0.0b5) — this is
+# unrelated to the beta-era mcp pin the other samples dropped.
 [tool.uv]
 prerelease = "allow"

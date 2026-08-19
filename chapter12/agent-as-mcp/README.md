@@ -16,12 +16,18 @@ Python is the purest form the chapter cites (the C# route is
 
 ## Version-skew note (like `chapter07/health-dashboard/`)
 
-`agent-framework 1.11.0` depends on **`mcp 1.28.1` — the v1 SDK line**, so this is one of
-the samples that does *not* run on the repo's v2 pins. The exposed server speaks the
-legacy era (`initialize` handshake, protocolVersion `2025-06-18` in the smoke below).
+`agent-framework` still pins **`mcp<2` — the v1 SDK line** (re-checked at the repo's GA
+pass, 2026-08-19: 1.14.0, the latest release, resolves to `mcp 1.28.1`), so this is one
+of the samples that does *not* run on the repo's v2 GA pins. The exposed server speaks
+the legacy era (`initialize` handshake, protocolVersion `2025-06-18` in the smoke below).
 Modern clients with auto version negotiation fall back to it transparently — which is
 itself a live demonstration of Chapter 4's dual-era reality. Re-check when MAF adopts
 the v2 `mcp` line.
+
+This project also keeps `[tool.uv] prerelease = "allow"` — unlike the rest of the repo,
+where it was a beta-era `mcp` artifact, here it is required by agent-framework's own
+dependency tree (several `agent-framework-*` subpackages and Azure deps only ship
+pre-releases).
 
 ## Run
 
@@ -46,7 +52,8 @@ sleep 20
 
 `tools/list` works without a model; `tools/call` invokes the agent for real.
 
-**Verified 2026-07-12**: full round trip against `gpt-4.1-mini` — the listed tool carries
+**Verified 2026-08-19 (GA pass, agent-framework 1.14.0)**: full round trip against
+`gpt-4.1-mini` — the listed tool carries
 the agent's name/description, the input schema is a single `task` string, and the call
 returned a haiku. Note the flattening the chapter describes: from the caller's side this
 is just a tool — the agent's model, instructions, and loop are invisible.
