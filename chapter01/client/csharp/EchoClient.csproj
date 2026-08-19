@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.7.0" />
-    <PackageReference Include="ModelContextProtocol" Version="2.0.0-preview.1" />
+    <PackageReference Include="ModelContextProtocol" Version="2.0.0" />
     <PackageReference Include="OllamaSharp" Version="5.4.8" />
     <!-- Only needed for the LLM API alternatives in AlternativeProviders.cs -->
     <PackageReference Include="Anthropic" Version="12.33.0" />
