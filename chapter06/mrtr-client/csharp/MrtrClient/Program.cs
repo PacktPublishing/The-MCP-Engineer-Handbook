@@ -1,7 +1,7 @@
 // MRTR client drivers (Chapter 6, Section 6.2.5).
 //
 // Default mode — the SDK-native path, C#'s only full-SDK route: in
-// preview.1 `McpClient` fulfils `input_required` results AUTOMATICALLY and
+// the 2.0.0 SDK `McpClient` fulfils `input_required` results AUTOMATICALLY and
 // unconditionally, inside SendRequestAsync. Each embedded request is
 // dispatched to the matching handler in `McpClientOptions.Handlers`
 // (ElicitationHandler here), the call retries with the collected

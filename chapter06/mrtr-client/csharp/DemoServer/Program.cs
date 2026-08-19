@@ -8,7 +8,7 @@
 // `never_satisfied` asks forever; it exists so the client can demonstrate its
 // retry budget tripping against a misbehaving server.
 //
-// C# SDK notes (ModelContextProtocol 2.0.0-preview.1):
+// C# SDK notes (ModelContextProtocol 2.0.0):
 //   - A tool handler produces an input_required result by THROWING
 //     `InputRequiredException(inputRequests, requestState)`; there is no
 //     result-value path like the TS `inputRequired({...})` helper. The

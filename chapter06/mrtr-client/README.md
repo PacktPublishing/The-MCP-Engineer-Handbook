@@ -45,7 +45,7 @@ Smoke (raw wire, handshake-less modern request — shows the `input_required` re
 
 ## C\#
 
-Demonstrates the **modern (2026-07-28) MRTR flow over stdio**, both directions native to `ModelContextProtocol` 2.0.0-preview.1. Same tools, same env vars; two projects (`DemoServer`, `MrtrClient`).
+Demonstrates the **modern (2026-07-28) MRTR flow over stdio**, both directions native to `ModelContextProtocol` 2.0.0. Same tools, same env vars; two projects (`DemoServer`, `MrtrClient`).
 
 Where the C# SDK differs from TS:
 
@@ -76,7 +76,7 @@ Raw wire smoke (same shape as the TS one):
 
 ## Python
 
-Demonstrates the **modern (2026-07-28) MRTR flow over stdio** with `mcp` 2.0.0b1. Despite the b1 era caveat elsewhere in this repo, this pair negotiates 2026-07-28 over stdio: the client's default `mode="auto"` probes `server/discover`, and `server.run()` (stdio) serves both eras through `serve_dual_era_loop` — a modern opening gets the modern era. Same tools, same env vars.
+Demonstrates the **modern (2026-07-28) MRTR flow over stdio** with `mcp` 2.0.0. This pair negotiates 2026-07-28 over stdio: the client's default `mode="auto"` probes `server/discover`, and `server.run()` (stdio) serves both eras through `serve_dual_era_loop` — a modern opening gets the modern era. Same tools, same env vars.
 
 Where the Python SDK differs from TS:
 

@@ -8,7 +8,7 @@
 # `never_satisfied` asks forever; it exists so the client can demonstrate its
 # retry budget tripping against a misbehaving server.
 #
-# Python SDK notes (mcp 2.0.0b1):
+# Python SDK notes (mcp 2.0.0):
 #   - A tool function returns an `InputRequiredResult` (from `mcp_types`)
 #     directly; there is no wrapper helper like the TS SDK's `inputRequired()`.
 #   - Retried answers arrive on `ctx.input_responses` (a dict of ElicitResult

@@ -1,6 +1,6 @@
 # The SDK-native MRTR path: no hand-written loop.
 #
-# In mcp 2.0.0b1, `client.call_tool()` (and `get_prompt` / `read_resource`)
+# In mcp 2.0.0, `client.call_tool()` (and `get_prompt` / `read_resource`)
 # resolves `InputRequiredResult`s AUTOMATICALLY: each embedded request is
 # dispatched to the matching callback (`elicitation_callback` here; sampling
 # and roots have their own), all requests in one round run concurrently, and

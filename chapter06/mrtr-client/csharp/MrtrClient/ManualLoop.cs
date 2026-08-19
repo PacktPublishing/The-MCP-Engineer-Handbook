@@ -2,7 +2,7 @@
 // production bounds the chapter calls for (retry budget, timeout, cancel) —
 // expressed at the WIRE level, over a raw ITransport.
 //
-// Why not over McpClient? In preview.1 the MRTR loop is welded into
+// Why not over McpClient? In the 2.0.0 SDK the MRTR loop is welded into
 // McpClientImpl.SendRequestAsync: every request auto-fulfils input_required
 // results through the registered handlers, capped at a hard-coded 10 rounds.
 // There is no per-call opt-out (nothing like the TS `allowInputRequired`),

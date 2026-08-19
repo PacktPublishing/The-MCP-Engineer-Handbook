@@ -24,7 +24,7 @@ Each mapping demo spawns its language's demo server over stdio, maps all tools t
 Port notes:
 
 - The C# demo server registers `WithListToolsHandler`/`WithCallToolHandler` and the Python one the low-level `Server` with `on_list_tools`/`on_call_tool` — like the TypeScript low-level `Server`, so the raw JSON schemas ($defs, oneOf, const, pattern) reach the client byte-for-byte instead of being re-derived from types.
-- The C# client is `McpClient.CreateAsync` + `StdioClientTransport`; the Python client is `mcp.client.Client` wrapping a `stdio_client(StdioServerParameters(...))` transport. Both negotiate 2026-07-28 with these servers. (The mcp 2.0.0b1 Python server is nominally legacy-era over stdio, but its low-level `Server` answers `server/discover` and handshake-less 2026-07-28 requests, so the modern era works for this pair; schemas round-trip identically either way.)
+- The C# client is `McpClient.CreateAsync` + `StdioClientTransport`; the Python client is `mcp.client.Client` wrapping a `stdio_client(StdioServerParameters(...))` transport. Both negotiate 2026-07-28 with these servers. (The mcp 2.0.0 Python stdio server is dual-era, locked per connection by the opening message: the low-level `Server` answers `server/discover` and handshake-less 2026-07-28 requests carrying the full `_meta` envelope, so the modern era works for this pair; schemas round-trip identically either way.)
 
 ## Smoke test
 

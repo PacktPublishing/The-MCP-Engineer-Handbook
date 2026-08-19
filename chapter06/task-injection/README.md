@@ -51,7 +51,7 @@ uv run host.py prepend           # or synthetic-turn | meta-tool | fresh-invocat
 uv run host.py --all             # all four, plus a comparison summary
 ```
 
-The host spawns `report_server.py` as a stdio child process using its own interpreter (`REPORT_SERVER_PY` overrides the script path). The b1 `Client` defaults to `mode="auto"`, which probes `server/discover` and falls back to the legacy initialize handshake — the era the Python 2.0.0b1 stdio server still speaks.
+The host spawns `report_server.py` as a stdio child process using its own interpreter (`REPORT_SERVER_PY` overrides the script path). The `Client` defaults to `mode="auto"`, which probes `server/discover` — the Python stdio server answers it, so this pair negotiates 2026-07-28 (against an older server the client falls back to the legacy initialize handshake transparently).
 
 ## Run (TypeScript)
 
@@ -76,16 +76,16 @@ The Python and TypeScript ports have no Microsoft.Extensions.AI equivalent, so e
 ```bash
 cd csharp/ReportServer && dotnet build
 { printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"start_report","arguments":{"topic":"smoke"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'; \
+  '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"start_report","arguments":{"topic":"smoke"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'; \
   sleep 4; printf '%s\n' \
-  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_report_result","arguments":{"operationId":"op-001"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'; \
+  '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"get_report_result","arguments":{"operationId":"op-001"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'; \
   sleep 1; } | dotnet bin/Debug/net10.0/ReportServer.dll 2>/dev/null
 ```
 
 Expect the tool list, a `running` handle, and a `completed` report.
 
-TypeScript is the same handshake-less exchange piped into `node dist/report-server.js` (after `npm run build`). Python 2.0.0b1 stdio speaks the legacy era: prepend an `initialize` request and an `initialized` notification, drop the `_meta` blocks, and pipe into `uv run report_server.py`:
+TypeScript is the same handshake-less exchange piped into `node dist/report-server.js` (after `npm run build`). The Python stdio server is dual-era, locked per connection by the opening message: handshake-less 2026-07-28 lines work when every request carries the full `_meta` envelope (`clientInfo` + `clientCapabilities` + `protocolVersion`), or open with an `initialize` handshake and drop the `_meta` blocks, as here:
 
 ```bash
 cd python

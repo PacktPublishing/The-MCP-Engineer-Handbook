@@ -6,7 +6,7 @@
 #
 # Scripted mode (no terminal interaction): see input_handler.py.
 #
-# Python SDK notes (mcp 2.0.0b1):
+# Python SDK notes (mcp 2.0.0):
 #   - `client.call_tool()` runs the MRTR loop itself (see native.py). The
 #     manual loop lives one level down: `client.session.call_tool(...,
 #     allow_input_required=True)` returns the interim `InputRequiredResult`

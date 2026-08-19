@@ -56,9 +56,10 @@ async def run_scenario(strategy: str) -> tuple[str, int, str]:
     print(f"STRATEGY: {strategy}")
     print("=" * 78)
 
-    # Connect to the demo server as a stdio child process. The b1 Client defaults to
-    # mode="auto": it probes server/discover (2026-07-28) and falls back to the legacy initialize
-    # handshake — which is what the Python stdio server still speaks in 2.0.0b1.
+    # Connect to the demo server as a stdio child process. The Client defaults to
+    # mode="auto": it probes server/discover (2026-07-28) — the Python stdio server
+    # answers it, so this pair negotiates the modern era (older servers fall back
+    # to the legacy initialize handshake transparently).
     transport = stdio_client(
         StdioServerParameters(command=sys.executable, args=[resolve_server_script()])
     )
