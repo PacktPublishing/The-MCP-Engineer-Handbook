@@ -31,9 +31,9 @@ var patchedTool = statusTool.WithDescription(
 
 ## Smoke test (stdio)
 
-Pipe requests into the server process (or type them interactively); the C# and TypeScript servers accept handshake-less 2026-07-28 requests. Set `OPERATION_DELAY_SECONDS=3` to make the wait short.
+Pipe requests into the server process (or type them interactively); all three servers accept handshake-less 2026-07-28 requests. The `_meta` envelope must be complete — at GA every SDK rejects a request missing `clientCapabilities` with -32602. Set `OPERATION_DELAY_SECONDS=3` to make the wait short.
 
-The Python server (high-level `MCPServer`, stdio) serves **both eras in 2.0.0b1**: the handshake-less 2026-07-28 requests below work as-is (it also answers `server/discover`), and a legacy client that opens with `initialize` negotiates 2025-11-25 — but that locks the connection to the legacy era, after which modern-envelope requests are rejected with -32600. The b1 Python client (`mode="auto"`, the default) negotiates 2026-07-28 against it.
+The Python server (high-level `MCPServer`, stdio) serves **both eras**: the handshake-less 2026-07-28 requests below work as-is (it also answers `server/discover`), and a legacy client that opens with `initialize` negotiates 2025-11-25 — but that locks the connection to the legacy era, after which modern-envelope requests are rejected with -32600. The Python client (`mode="auto"`, the default) negotiates 2026-07-28 against it.
 
 Start an operation:
 
