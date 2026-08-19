@@ -11,8 +11,8 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "@modelcontextprotocol/ext-apps": "1.7.4",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^3.25.1"
   },
   "devDependencies": {

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol.Extensions.Tasks;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
 
@@ -10,15 +11,13 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 
 builder.Services
-    .AddMcpServer(options =>
-    {
-        // Setting a task store is the entire server-side opt-in: the server declares
-        // io.modelcontextprotocol/tasks, serves tasks/get, tasks/update, and
-        // tasks/cancel from the store, and wraps tool calls from clients that
-        // declared the extension in tasks — returning resultType: "task" immediately
-        // while the tool runs in the background.
-        options.TaskStore = new InMemoryMcpTaskStore { DefaultPollIntervalMs = 1000 };
-    })
+    .AddMcpServer()
+    // WithTasks (from the ModelContextProtocol.Extensions.Tasks package) is the entire
+    // server-side opt-in: the server declares io.modelcontextprotocol/tasks, serves
+    // tasks/get, tasks/update, and tasks/cancel from the store, and wraps tool calls
+    // from clients that declared the extension in tasks — returning
+    // resultType: "task" immediately while the tool runs in the background.
+    .WithTasks(new InMemoryMcpTaskStore { DefaultPollIntervalMs = 1000 })
     .WithStdioServerTransport()
     .WithTools<ReportTools>();
 

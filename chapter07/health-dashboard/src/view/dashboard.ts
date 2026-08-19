@@ -17,7 +17,7 @@ interface HealthData {
 const app = new App({ name: "Health Dashboard", version: "1.0.0" });
 
 // Handle initial tool result — render the dashboard
-// (the single-handler app.ontoolresult property is deprecated in 1.7.4)
+// (the single-handler app.ontoolresult property is deprecated in 1.7.5)
 app.addEventListener("toolresult", (result) => {
   renderDashboard(result.structuredContent as HealthData | undefined);
 });

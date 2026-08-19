@@ -18,18 +18,19 @@ This sample is **TypeScript-only by design**: the MCP Apps SDK
 
 ## Version skew — this sample uses the v1 SDK
 
-**Unlike every other sample in this repo (which pin the v2 SDK betas), this one is built on
-the v1 monolith SDK.** `@modelcontextprotocol/ext-apps` 1.7.4 — the latest release — peer-depends
-on `@modelcontextprotocol/sdk ^1.29.0`; no ext-apps release supports the v2 SDK packages yet.
-This is exactly the extension-ecosystem skew that sections 7.4.2 and 7.5.2 discuss: extensions
-version independently of the core SDKs, and an extension can lag a major SDK transition.
+**Unlike every other sample in this repo (which pin the v2 GA SDKs), this one is built on
+the v1 monolith SDK.** As of 2026-08, `@modelcontextprotocol/ext-apps` 1.7.5 — the latest
+release — peer-depends on `@modelcontextprotocol/sdk ^1.29.0`; no ext-apps release supports
+the v2 SDK packages. This is exactly the extension-ecosystem skew that sections 7.4.2 and
+7.5.2 discuss: extensions version independently of the core SDKs, and an extension can lag
+a major SDK transition.
 
-Pinned versions (exact, do not bump piecemeal):
+Pinned versions:
 
 | Package | Version |
 | --- | --- |
-| `@modelcontextprotocol/ext-apps` | `1.7.4` |
-| `@modelcontextprotocol/sdk` | `1.29.0` |
+| `@modelcontextprotocol/ext-apps` | `1.7.5` (exact) |
+| `@modelcontextprotocol/sdk` | `^1.29.0` — ext-apps' peer range (resolved to `1.30.0` when last verified, 2026-08) |
 
 Consequently the server imports come from the v1 paths
 (`@modelcontextprotocol/sdk/server/mcp.js`, `.../server/stdio.js`), and the stdio smoke test
@@ -37,9 +38,11 @@ below uses the legacy `initialize`/`notifications/initialized` handshake rather 
 handshake-less 2026-07-28 posture used elsewhere in the repo.
 
 **Expected migration:** when ext-apps ships v2-SDK support, this sample should move to
-`@modelcontextprotocol/server` and the repo-wide pins. The GA re-verify pass will revisit.
+`@modelcontextprotocol/server` and the repo-wide pins. Re-checked during the GA pass
+(2026-08-19): still no v2-compatible ext-apps release, so the sample intentionally stays
+on the v1 SDK.
 
-Known wart: ext-apps 1.7.4 ships `.d.ts` files with extensionless relative imports, which
+Known wart: ext-apps 1.7.5 ships `.d.ts` files with extensionless relative imports, which
 `moduleResolution: NodeNext` rejects — `skipLibCheck: true` is required in tsconfig.
 
 ## Layout

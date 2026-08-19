@@ -3,6 +3,7 @@
 // it needs an input_required task, which needs an elicitation-capable host.
 using ModelContextProtocol;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Extensions.Tasks;
 using ModelContextProtocol.Protocol;
 using System.Text.Json;
 
@@ -24,10 +25,11 @@ static Dictionary<string, JsonElement> ReportArgs(string topic, int seconds) => 
 };
 
 // --- 1. Task creation is server-directed --------------------------------------
-// CallToolRawAsync declares the tasks extension on the request and returns the raw
-// response: either an immediate result or a task handle. The client never asks for
-// a task; the server decides.
-ResultOrCreatedTask<CallToolResult> response = await client.CallToolRawAsync(
+// CallToolAsTaskAsync (from the ModelContextProtocol.Extensions.Tasks package)
+// declares the tasks extension on the request and returns the raw response: either
+// an immediate result or a task handle. The client never asks for a task; the
+// server decides.
+ResultOrCreatedTask<CallToolResult> response = await client.CallToolAsTaskAsync(
     new CallToolRequestParams { Name = "generate_report", Arguments = ReportArgs("quarterly sales", 4) });
 
 CreateTaskResult created = response.TaskCreated!;
@@ -52,7 +54,7 @@ if (snapshot is CompletedTaskResult completed)
 }
 
 // --- 3. tasks/cancel: cooperative, eventually consistent ----------------------
-var slow = await client.CallToolRawAsync(
+var slow = await client.CallToolAsTaskAsync(
     new CallToolRequestParams { Name = "generate_report", Arguments = ReportArgs("all of history", 600) });
 
 var slowTask = slow.TaskCreated!;
@@ -65,8 +67,8 @@ var after = await client.GetTaskAsync(slowTask.TaskId);
 Console.WriteLine($"tasks/get    -> {after.Status}");
 
 // --- 4. The transparent path ---------------------------------------------------
-// Plain CallToolAsync also declares the extension, then polls any task handle to
-// completion internally — the whole lifecycle above, hidden behind one call.
-var direct = await client.CallToolAsync(
+// CallToolWithPollingAsync also declares the extension, then polls any task handle
+// to completion internally — the whole lifecycle above, hidden behind one call.
+var direct = await client.CallToolWithPollingAsync(
     new CallToolRequestParams { Name = "generate_report", Arguments = ReportArgs("one more thing", 2) });
-Console.WriteLine($"CallToolAsync -> {direct.Content.OfType<TextContentBlock>().First().Text}");
+Console.WriteLine($"CallToolWithPollingAsync -> {direct.Content.OfType<TextContentBlock>().First().Text}");
