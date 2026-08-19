@@ -1,18 +1,18 @@
 # The MCP Engineering Handbook — Companion Samples
 
-Code samples for the book, written against the **2026-07-28 MCP specification** (release candidate at time of writing) using the v2 SDK line.
+Code samples for the book, written against the **2026-07-28 MCP specification** using the v2 GA SDKs. Every project was rebuilt and smoke-tested on the GA releases (2026-08-19).
 
 ## SDK pins
 
-Betas are pinned exactly; a bump-and-reverify pass follows the July 28 GA.
+GA versions are pinned exactly.
 
 | Language | Package | Version |
 |---|---|---|
-| C# | `ModelContextProtocol` (+ `.AspNetCore` where used) | `2.0.0-preview.1` |
-| Python | `mcp` | `2.0.0b1` (requires `[tool.uv] prerelease = "allow"`) |
-| TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` | `2.0.0-beta.1` |
+| C# | `ModelContextProtocol` (+ `.AspNetCore` where used; `.Extensions.Tasks` for the tasks extension) | `2.0.0` |
+| Python | `mcp` | `2.0.0` |
+| TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` | `2.0.0` |
 
-Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above.
+Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. Two deliberate exceptions ride the v1 `mcp`/`sdk` line because their extension ecosystems have not adopted v2: `chapter07/health-dashboard` (ext-apps) and `chapter12/agent-as-mcp` (Microsoft Agent Framework) — see their READMEs.
 
 ## Layout
 
@@ -45,7 +45,7 @@ templates/hello-server/   walking skeleton in all three languages (toolchain che
 | `chapter06/schema-mapping/` | §6.2.2/§6.2.3 | TS (canonical), C#, Python |
 | `chapter06/mrtr-client/` | §6.2.5 | TS (canonical), C#, Python |
 | `chapter06/task-injection/` | §6.2.11 | C# (canonical), Python, TS |
-| `chapter07/health-dashboard/` | §7.4 | TS only (Apps SDK; v1 SDK + ext-apps 1.7.4) |
+| `chapter07/health-dashboard/` | §7.4 | TS only (Apps SDK; v1 SDK + ext-apps 1.7.5) |
 | `chapter07/tasks-polling/` | §7.3 | C# (client-side task methods, minimal) |
 | `chapter09/token-validation/` | §9.2.2/§9.2.4/§9.2.7 | C# (canonical) |
 | `chapter09/stepup-client/` | §9.7.4 | C# (union rule + naive anti-pattern) |
@@ -56,11 +56,12 @@ templates/hello-server/   walking skeleton in all three languages (toolchain che
 | `chapter12/agent-as-mcp/` | §12.3 | Python only (MAF `as_mcp_server()`; rides mcp v1 via MAF pin — see its README) |
 | `templates/hello-server`, `templates/hello-client` | — | toolchain skeletons |
 
-## Beta-era caveats (verified 2026-07-12, revisit at GA)
+## SDK behavior notes (verified at GA, 2026-08-19)
 
-- **C# stdio and TypeScript stdio** serve handshake-less 2026-07-28 requests; C# `tools/list` responses carry `ttlMs`/`cacheScope`.
-- **TypeScript stdio servers must use `serveStdio(factory)`** — hand-wiring `server.connect(new StdioServerTransport())` pins the connection to the legacy era (no `server/discover`, clients negotiate 2025-11-25). The modern era also validates the `_meta` envelope strictly: handshake-less requests need `clientInfo`, `clientCapabilities`, and `protocolVersion` (C# preview.1 is more lenient).
-- **TypeScript clients default to the legacy negotiation posture** — pass `versionNegotiation: { mode: 'auto' }`.
-- **Python `2.0.0b1` stdio serves both eras, locked per connection by the opening message** (re-verified 2026-07-12 against the chapter 2/3 servers): the high-level `MCPServer.run()` stdio path answers `server/discover` and accepts handshake-less 2026-07-28 requests (as does the low-level `Server` path and streamable HTTP); a connection opened with `initialize` instead negotiates `2025-11-25` and then **rejects modern-envelope requests with -32600**. The Python client's `mode='auto'` negotiates 2026-07-28 against these servers and falls back to `initialize` against old ones.
+- **All three SDKs serve handshake-less 2026-07-28 requests over stdio**, and all three validate the `_meta` envelope strictly: modern-era requests need `clientInfo`, `clientCapabilities`, and `protocolVersion`, or the request fails with -32602. (The preview-era C# leniency is gone at GA.) `tools/list` responses carry `ttlMs`/`cacheScope` from all three SDKs.
+- **TypeScript stdio servers must use `serveStdio(factory)`** — hand-wiring `server.connect(new StdioServerTransport())` serves no `server/discover` (-32601), so negotiating clients fall back to the legacy era (2025-11-25).
+- **TypeScript clients default to the legacy negotiation posture** — pass `versionNegotiation: { mode: 'auto' }`. This did not change at GA.
+- **Python stdio serves both eras, locked per connection by the opening message**: the high-level `MCPServer.run()` stdio path answers `server/discover` and accepts handshake-less 2026-07-28 requests (as does the low-level `Server` path and streamable HTTP); a connection opened with `initialize` instead negotiates `2025-11-25` and then **rejects modern-envelope requests with -32600**. The Python client's `mode='auto'` negotiates 2026-07-28 against these servers and falls back to `initialize` against old ones.
 - **Version-negotiation defaults differ per SDK**: Python client auto-probes the modern era by default, TypeScript defaults to legacy (pass `versionNegotiation: { mode: 'auto' }`), C# negotiates modern with no option needed.
+- **C# tasks extension is a separate package at GA**: `ModelContextProtocol.Extensions.Tasks` (`.WithTasks(store)`, `CallToolAsTaskAsync`, `CallToolWithPollingAsync`) — see `chapter07/tasks-polling/`.
 - Toolchain prerequisites: .NET 10 SDK, Node.js ≥ 20, `uv` (Python projects pin their own interpreter, ≥ 3.12).
