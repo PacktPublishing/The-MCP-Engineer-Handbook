@@ -198,7 +198,7 @@ def user_preferences(id: int) -> str:
 
 
 # The C# canonical registers an RFC 6570 LEVEL-4 template here
-# (docs://search{?tags*,limit}). The Python 2.0.0b1 SDK REJECTS the explode
+# (docs://search{?tags*,limit}). The Python 2.0.0 SDK REJECTS the explode
 # modifier at registration time (InvalidUriTemplate: "Explode modifier on
 # {?tags*} is not supported for matching"), so this port registers the level-3
 # form without the modifier — single-valued ?tags=...&limit=... reads route and

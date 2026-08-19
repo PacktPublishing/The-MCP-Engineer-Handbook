@@ -4,8 +4,5 @@ version = "0.1.0"
 description = "Model-controlled resource access via tool wrappers (Chapter 3, §3.3.3)"
 requires-python = ">=3.12"
 dependencies = [
-    "mcp==2.0.0b1",
+    "mcp==2.0.0",
 ]
-
-[tool.uv]
-prerelease = "allow"

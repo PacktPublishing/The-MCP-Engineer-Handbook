@@ -8,7 +8,7 @@
     "start": "node dist/client.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "2.0.0-beta.1"
+    "@modelcontextprotocol/client": "2.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

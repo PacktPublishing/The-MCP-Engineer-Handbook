@@ -43,7 +43,7 @@ async def main() -> int:
         print(f"Usage: uv run host.py [{'|'.join(KNOWN)}|--all]", file=sys.stderr)
         return 1
 
-    # Connect to the demo server as a stdio child process. The b1 Client defaults to
+    # Connect to the demo server as a stdio child process. The Client defaults to
     # mode="auto": it probes server/discover and establishes the modern 2026-07-28 era
     # (the demo server answers the probe), falling back to the legacy initialize
     # handshake against older servers.

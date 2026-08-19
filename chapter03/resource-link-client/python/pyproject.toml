@@ -4,8 +4,5 @@ version = "0.1.0"
 description = "Hardened resolution of resource links in tool results (Chapter 3, §3.3.4)"
 requires-python = ">=3.12"
 dependencies = [
-    "mcp==2.0.0b1",
+    "mcp==2.0.0",
 ]
-
-[tool.uv]
-prerelease = "allow"

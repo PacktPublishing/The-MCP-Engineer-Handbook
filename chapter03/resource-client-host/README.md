@@ -36,7 +36,7 @@ uv run host.py            # all three approaches + comparison table
 uv run host.py user       # or: system | hybrid
 ```
 
-The Python host spawns `demo-resource-server/python/server.py` as a stdio child (`DEMO_RESOURCE_SERVER_PY` overrides the path); the pair negotiates the modern **2026-07-28** era (the b1 client's default `mode="auto"` probes `server/discover`, which the high-level Python server answers). The chat side is a `ChatModel` protocol with the same deterministic scripted model; the SHA-256 attestation binding and the printed context dumps match the C# output. Smoke is the same: three dumps, marker in a different message per approach.
+The Python host spawns `demo-resource-server/python/server.py` as a stdio child (`DEMO_RESOURCE_SERVER_PY` overrides the path); the pair negotiates the modern **2026-07-28** era (the Python client's default `mode="auto"` probes `server/discover`, which the high-level Python server answers). The chat side is a `ChatModel` protocol with the same deterministic scripted model; the SHA-256 attestation binding and the printed context dumps match the C# output. Smoke is the same: three dumps, marker in a different message per approach.
 
 **TypeScript:**
 
@@ -48,12 +48,12 @@ npm start                  # all three approaches + comparison table
 node dist/host.js user     # or: system | hybrid
 ```
 
-The TS host spawns `demo-resource-server/typescript/dist/server.js` as a stdio child (`DEMO_RESOURCE_SERVER_JS` overrides the path) and prints the negotiated protocol version — **2026-07-28**, established by `versionNegotiation: { mode: 'auto' }` (the beta.1 client's default posture is legacy). The chat side is a `ChatClient` interface over part-lists (the role Microsoft.Extensions.AI plays in C#) with the same deterministic scripted model; the SHA-256 attestation binding and the printed context dumps match the C# output. Smoke is the same: three dumps, marker in a different message per approach.
+The TS host spawns `demo-resource-server/typescript/dist/server.js` as a stdio child (`DEMO_RESOURCE_SERVER_JS` overrides the path) and prints the negotiated protocol version — **2026-07-28**, established by `versionNegotiation: { mode: 'auto' }` (the TS client defaults to the legacy posture, unchanged at 2.0.0, so the option stays). The chat side is a `ChatClient` interface over part-lists (the role Microsoft.Extensions.AI plays in C#) with the same deterministic scripted model; the SHA-256 attestation binding and the printed context dumps match the C# output. Smoke is the same: three dumps, marker in a different message per approach.
 
 ## Deviations from the printed extracts
 
-Written against `ModelContextProtocol` 2.0.0-preview.1:
+Written against `ModelContextProtocol` 2.0.0:
 
 - `systemMessage.Contents.AddRange(resourceReadResult.Contents)` (and the same line on `userMessage` in the hybrid) does not compile: `ChatMessage.Contents` is an `IList<AIContent>` (no `AddRange`), and read contents are `ResourceContents`, not `AIContent`. The sample converts with the SDK's `ToAIContents()` and adds in a loop.
 
-TypeScript (`@modelcontextprotocol/client` 2.0.0-beta.1): the C# `AddRange` problem has no TS counterpart (the chat abstraction is a plain part list), but the conversion step remains — read contents are not message parts, so `host.ts` maps them in `toParts`, discriminating text from blob structurally (`'text' in c`).
+TypeScript (`@modelcontextprotocol/client` 2.0.0): the C# `AddRange` problem has no TS counterpart (the chat abstraction is a plain part list), but the conversion step remains — read contents are not message parts, so `host.ts` maps them in `toParts`, discriminating text from blob structurally (`'text' in c`).

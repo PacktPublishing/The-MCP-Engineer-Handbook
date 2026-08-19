@@ -80,7 +80,7 @@ async def resolve_links(
 
 
 # Read contents are text|blob; content blocks are typed. The C# SDK converts via
-# ToAIContent().ToContentBlock(); the Python b1 SDK has no equivalent helper, so the
+# ToAIContent().ToContentBlock(); the Python SDK has no equivalent helper, so the
 # mapping (text -> text block, blob -> image/audio block by MIME type) is spelled out.
 def to_content_block(contents: ResourceContents) -> ContentBlock:
     if isinstance(contents, TextResourceContents):

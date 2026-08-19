@@ -194,14 +194,18 @@ public class DemoResources
         };
     }
 
-    // An RFC 6570 LEVEL-4 template (explode modifier on a query expansion). preview.1
-    // accepts and advertises the syntax, but routing only matches SINGLE-valued
-    // expansions (?tags=a&tags=b is rejected with -32602) and binds the value as a
-    // scalar — an array parameter here throws at bind time. See the sample READMEs
-    // for the full verdict on the SDK's URI-template support.
+    // An RFC 6570 LEVEL-4 template (explode modifier on a query expansion). 2.0.0
+    // accepts and advertises the syntax, but routing rejects the repeated-key
+    // expansion (?tags=a&tags=b -> -32602) and binds the value as a scalar
+    // (?tags=a,b binds the string "a,b") — an array parameter here throws at bind
+    // time. Partial expansions (?tags=a with limit omitted) route, but at GA an
+    // omitted variable binds only if the parameter declares a DEFAULT VALUE —
+    // nullability alone made it optional in preview.1; without `= null` GA throws
+    // "Missing a value for the required parameter" (-32603). See the sample
+    // READMEs for the full verdict on the SDK's URI-template support.
     [McpServerResource(UriTemplate = "docs://search{?tags*,limit}", Name = "doc_search"),
      Description("Searches the documentation catalog by tag.")]
-    public static string SearchDocs(string? tags, int? limit)
+    public static string SearchDocs(string? tags = null, int? limit = null)
     {
         return $"Search results for tags [{tags ?? "(none)"}] (limit {limit?.ToString() ?? "default"}): " +
                "user_guide.md, release_notes.md";

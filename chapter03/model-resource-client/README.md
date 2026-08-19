@@ -31,7 +31,7 @@ cd ../../model-resource-client/python && uv sync
 uv run host.py
 ```
 
-The Python host spawns two instances of `demo-resource-server/python/server.py` as stdio children (`DEMO_RESOURCE_SERVER_PY` overrides the path); each pair negotiates the modern **2026-07-28** era. `ClientManager` holds one b1 `Client` per host-assigned label on an `AsyncExitStack`; the wrapper tools, the scripted model's routing, and the printed history match the C# output (same smoke criteria).
+The Python host spawns two instances of `demo-resource-server/python/server.py` as stdio children (`DEMO_RESOURCE_SERVER_PY` overrides the path); each pair negotiates the modern **2026-07-28** era. `ClientManager` holds one `Client` per host-assigned label on an `AsyncExitStack`; the wrapper tools, the scripted model's routing, and the printed history match the C# output (same smoke criteria).
 
 **TypeScript:**
 
@@ -42,8 +42,8 @@ cd ../../model-resource-client/typescript && npm ci && npm run build
 npm start
 ```
 
-The TS host spawns two instances of `demo-resource-server/typescript/dist/server.js` as stdio children (`DEMO_RESOURCE_SERVER_JS` overrides the path); each pair negotiates the modern **2026-07-28** era via `versionNegotiation: { mode: 'auto' }` and the host prints the negotiated version. `ClientManager` holds one beta.1 `Client` per host-assigned label; the wrapper tools, the scripted model's routing, and the printed history match the C# output (same smoke criteria).
+The TS host spawns two instances of `demo-resource-server/typescript/dist/server.js` as stdio children (`DEMO_RESOURCE_SERVER_JS` overrides the path); each pair negotiates the modern **2026-07-28** era via `versionNegotiation: { mode: 'auto' }` (still required at 2.0.0 — the TS client defaults to the legacy posture) and the host prints the negotiated version. `ClientManager` holds one `Client` per host-assigned label; the wrapper tools, the scripted model's routing, and the printed history match the C# output (same smoke criteria).
 
 ## Deviations from the printed extracts
 
-None. The `ListResources`/`ReadResource` methods in `ResourceTools.cs` compile verbatim against `ModelContextProtocol` 2.0.0-preview.1; the sample supplies the pieces the extract elides (`ClientManager`, `ResourceMetadata`, `FormatResourceMetadata`, `FormatResourceContent`).
+None. The `ListResources`/`ReadResource` methods in `ResourceTools.cs` compile verbatim against `ModelContextProtocol` 2.0.0; the sample supplies the pieces the extract elides (`ClientManager`, `ResourceMetadata`, `FormatResourceMetadata`, `FormatResourceContent`).

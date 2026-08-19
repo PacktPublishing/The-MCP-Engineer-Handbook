@@ -54,17 +54,17 @@ The TS client spawns `demo-resource-server/typescript/dist/server.js` as a stdio
 
 ## Deviations from the printed extracts
 
-Written against `ModelContextProtocol` 2.0.0-preview.1:
+Written against `ModelContextProtocol` 2.0.0:
 
-- `IMcpClient` does not exist in preview.1 — the parameter is typed `McpClient` (a concrete class; its only interface is `IAsyncDisposable`).
+- `IMcpClient` does not exist in 2.0.0 — the parameter is typed `McpClient` (a concrete class; its only interface is `IAsyncDisposable`).
 - `read.Contents.Select(c => c.ToContentBlock())` does not compile: there is no `ToContentBlock()` on `ResourceContents`. The conversion goes through Microsoft.Extensions.AI, `c.ToAIContent().ToContentBlock()` (text contents → `TextContentBlock`, blobs → image/audio blocks by MIME type).
 
-Python (`mcp` 2.0.0b1):
+Python (`mcp` 2.0.0):
 
-- The b1 SDK has no contents→content-block conversion helper at all; `client.py` spells the mapping out in `to_content_block` (text → `TextContent`, blobs → image/audio blocks by MIME prefix).
+- The Python SDK has no contents→content-block conversion helper at all; `client.py` spells the mapping out in `to_content_block` (text → `TextContent`, blobs → image/audio blocks by MIME prefix).
 - Failed reads raise `mcp.shared.exceptions.MCPError` (the counterpart of C#'s `McpException`).
 
-TypeScript (`@modelcontextprotocol/client` 2.0.0-beta.1):
+TypeScript (`@modelcontextprotocol/client` 2.0.0):
 
 - Also no contents→content-block helper; `client.ts` spells the mapping out in `contentsToBlock`, and read contents are discriminated structurally (`'text' in contents`) — the SDK exports no type guard for text vs. blob contents.
 - Failed reads throw `ProtocolError` (the counterpart of C#'s `McpException`).

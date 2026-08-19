@@ -9,25 +9,25 @@ What it exposes:
 - **Deliberately awkward resources** for the link-resolution hardening demo (§3.3.4): an oversized CSV (declared `size` 64 000), a binary `audio/wav` blob, and a three-hop link chain (`chain://a` → `b` → `c` → back to `a`) whose hops tunnel onward links as JSON content. `get_research_bundle` returns links to all of them plus one dangling link.
 - **Resource templates** (§3.4.1): the book's `file://user/{id}/preferences.md` extract, plus an RFC 6570 level-4 template (`docs://search{?tags*,limit}`) kept as a record of what the SDK does with it.
 
-## URI-template support in `ModelContextProtocol` 2.0.0-preview.1
+## URI-template support in `ModelContextProtocol` 2.0.0
 
 The chapter says the major SDKs can be expected to support all four levels of RFC 6570. Measured against this package:
 
-| Level | Feature | preview.1 behavior |
+| Level | Feature | 2.0.0 behavior |
 |---|---|---|
 | 1 | `{var}` | works, typed parameter binding included |
 | 2 | reserved `{+var}`, fragment `{#var}` | matches |
-| 3 | multi-variable, `{.var}`, `{/var}`, `{?a,b}`, `{&a,b}` | matches |
-| 4 | explode `{?tags*}` | template accepted and advertised, but only **single-valued** expansions match (`?tags=a&tags=b` → `-32602`), and the value binds as a scalar — a `string[]` parameter throws at bind time |
+| 3 | multi-variable, `{.var}`, `{/var}`, `{?a,b}`, `{&a,b}` | matches; partial query expansions (`?x=1` with `y` omitted) route, but an omitted variable binds only if the parameter declares a **default value** — nullability alone sufficed in preview.1, at GA a `string? y` without `= null` throws at bind time (`-32603`, "Missing a value for the required parameter") |
+| 4 | explode `{?tags*}` | template accepted and advertised, but the repeated-key expansion is rejected (`?tags=a&tags=b` → `-32602`) and the value binds as a scalar (`?tags=a,b` binds the string `"a,b"`) — a `string[]` parameter throws at bind time |
 | 4 | prefix `{name:3}` | matches, but the length constraint is not enforced (`abcdef` matches `{name:3}`) |
 
-In short: levels 1–3 work; level-4 syntax parses but its matching semantics are incomplete.
+In short: levels 1–3 work (give optional variables parameter defaults); level-4 syntax parses but its matching semantics are incomplete.
 
-## URI-template support in `mcp` 2.0.0b1 (Python)
+## URI-template support in `mcp` 2.0.0 (Python)
 
 The Python SDK draws the line one step earlier — level-4 modifiers it can't match are rejected at **registration** instead of being silently mismatched:
 
-| Level | Feature | 2.0.0b1 behavior |
+| Level | Feature | 2.0.0 behavior |
 |---|---|---|
 | 1 | `{var}` | works, typed parameter binding included (`id: int` binds) |
 | 2 | reserved `{+var}` | matches (multi-segment values bind as one string) |
@@ -38,14 +38,14 @@ The Python SDK draws the line one step earlier — level-4 modifiers it can't ma
 
 Because the explode form won't register, the Python port declares the search template as level-3 `docs://search{?tags,limit}` — single-valued `?tags=...&limit=...` reads route and bind fine.
 
-## URI-template support in `@modelcontextprotocol/server` 2.0.0-beta.1 (TypeScript)
+## URI-template support in `@modelcontextprotocol/server` 2.0.0 (TypeScript)
 
-| Level | Feature | 2.0.0-beta.1 behavior |
+| Level | Feature | 2.0.0 behavior |
 |---|---|---|
 | 1 | `{var}` | works; variables arrive as strings in the callback's `variables` record |
-| 4 | query explode `{?tags*}` | template accepted and advertised, but only **single-valued, all-variables-present** expansions match: `?tags=a&limit=5` routes and binds `tags` as a scalar; `?tags=a&tags=b`, `?tags=a` (limit omitted), `?tags=a,b`, and the bare base URI all miss with `-32602 Resource not found` |
+| 4 | query explode `{?tags*}` | template accepted and advertised, but only **all-variables-present** expansions match: `?tags=a&limit=5` routes and binds `tags` as a scalar; `?tags=a,b&limit=5` routes and binds `tags` as the array `['a','b']` (new at GA — beta.1 rejected the comma form); the repeated-key form `?tags=a&tags=b`, `?tags=a` (limit omitted), and the bare base URI all still miss with `-32602 Resource not found` |
 
-Stricter than C# on the same template: C# matches partial query expansions, beta.1 requires every variable in the expression to be present.
+Stricter than C# on the same template: C# matches partial query expansions, the TS 2.0.0 matcher requires every variable in the expression to be present. On multi-valued binding they diverge the other way — TS splits `?tags=a,b` into an array where C# binds the scalar string `"a,b"`.
 
 ## Run
 
@@ -65,6 +65,6 @@ M='"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},
   sleep 3; } | dotnet run --project csharp 2>/dev/null
 ```
 
-**Python:** `cd python && uv sync`. Same catalog — identical URIs, names, MIME types, the declared `size: 64000` on the bundle's `big_dataset` link, and the same 3-hop chain. The Python client samples locate `python/server.py` automatically (override with `DEMO_RESOURCE_SERVER_PY`). The high-level `MCPServer` stdio path serves **both eras** in 2.0.0b1: the same handshake-less smoke works with `| uv run --project python python/server.py 2>/dev/null` (it answers `server/discover`; an `initialize` opening instead locks the connection to the legacy 2025-11-25 era). One deviation: tools returning `ResourceLink` content need `structured_output=False` on the decorator, or the SDK publishes the ResourceLink model itself as the tool's output schema.
+**Python:** `cd python && uv sync`. Same catalog — identical URIs, names, MIME types, the declared `size: 64000` on the bundle's `big_dataset` link, and the same 3-hop chain. The Python client samples locate `python/server.py` automatically (override with `DEMO_RESOURCE_SERVER_PY`). The high-level `MCPServer` stdio path serves **both eras** at 2.0.0: the same handshake-less smoke works with `| uv run --project python python/server.py 2>/dev/null` (it answers `server/discover`; an `initialize` opening instead locks the connection to the legacy 2025-11-25 era). One deviation: tools returning `ResourceLink` content need `structured_output=False` on the decorator, or the SDK publishes the ResourceLink model itself as the tool's output schema.
 
-**TypeScript:** `cd typescript && npm ci && npm run build`. Same catalog — identical URIs, names, MIME types, the declared `size: 64000` on the bundle's `big_dataset` link, and the same 3-hop chain. The TS client samples locate `typescript/dist/server.js` automatically (override with `DEMO_RESOURCE_SERVER_JS`). Served with `serveStdio`, so the same handshake-less smoke works with `| node typescript/dist/server.js 2>/dev/null`. `resource_link` blocks in tool results and `ResourceTemplate` registration both work in beta.1 unmodified; the one structural deviation is that the template read callback receives `(uri, variables)` with string variables — the `{id}` is parsed with `Number(...)` where C# binds a typed `int id` parameter.
+**TypeScript:** `cd typescript && npm ci && npm run build`. Same catalog — identical URIs, names, MIME types, the declared `size: 64000` on the bundle's `big_dataset` link, and the same 3-hop chain. The TS client samples locate `typescript/dist/server.js` automatically (override with `DEMO_RESOURCE_SERVER_JS`). Served with `serveStdio`, so the same handshake-less smoke works with `| node typescript/dist/server.js 2>/dev/null`. `resource_link` blocks in tool results and `ResourceTemplate` registration both work at 2.0.0 unmodified; the one structural deviation is that the template read callback receives `(uri, variables)` with string variables — the `{id}` is parsed with `Number(...)` where C# binds a typed `int id` parameter.
