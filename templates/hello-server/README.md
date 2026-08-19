@@ -16,4 +16,4 @@ Minimal stdio MCP server with one tool (`say_hello`) in all three languages. Not
 {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"say_hello","arguments":{"name":"Peder"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke-test","version":"0.0.1"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}
 ```
 
-All three serve this modern-era opening (the full `_meta` envelope is required — TS and Python reject requests without `clientCapabilities`). Opening with a legacy `initialize` instead locks the connection to the 2025-11-25 era on TS and Python.
+All three serve this modern-era opening (the full `_meta` envelope is required — at GA all three SDKs reject requests without `clientCapabilities` with -32602). Opening with a legacy `initialize` instead locks the connection to the 2025-11-25 era on TS and Python.
