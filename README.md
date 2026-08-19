@@ -39,6 +39,7 @@ templates/hello-server/   walking skeleton in all three languages (toolchain che
 | `chapter03/resource-link-client/` | §3.3.4 | C# (canonical), Python, TS |
 | `chapter05/progressive-disclosure/` | §5.1.2 | TS (canonical), C#, Python |
 | `chapter05/preview-before-execute/` | §5.1.4 | C# (canonical), Python, TS |
+| `chapter05/completions/` | §5.3.3 | Python (canonical), TS, C# |
 | `chapter05/low-level-handlers/` | §5.4.1/§5.4.3 | TS + Python (canonical), C# |
 | `chapter05/csharp-filters/` | §5.4.2 | C# only (by design) |
 | `chapter06/schema-mapping/` | §6.2.2/§6.2.3 | TS (canonical), C#, Python |
