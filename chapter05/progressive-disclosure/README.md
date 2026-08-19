@@ -37,21 +37,15 @@ Generation" section.
 - **Python (stdio)**: `cd python && uv run python server.py`
 - **Python (streamable HTTP)**: `cd python && uv run python http_server.py`
 
-All servers speak stdio. The TypeScript and C# servers accept handshake-less
-2026-07-28 requests; Python stdio on mcp 2.0.0b1 still runs the legacy era, so
-prepend the `initialize` handshake (below) when smoke-testing it.
+All servers speak stdio, and all three accept handshake-less 2026-07-28
+requests (the Python stdio server is dual-era, locked per connection by the
+opening message: send the classic `initialize` handshake instead to exercise
+its legacy era — and then drop the `_meta` envelope from later requests, as a
+handshake-opened connection rejects it with `-32600`).
 
 ## Smoke test
 
-Pipe these into the running process (one per line). For Python stdio, first
-send:
-
-```
-{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}
-{"jsonrpc":"2.0","method":"notifications/initialized"}
-```
-
-Then, on any of the three:
+Pipe these into the running process (one per line), on any of the three:
 
 ```
 {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_endpoints","arguments":{},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}

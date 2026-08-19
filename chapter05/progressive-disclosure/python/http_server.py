@@ -1,5 +1,5 @@
-# Streamable HTTP entry point — the 2026-07-28 stateless era in mcp 2.0.0b1
-# works over HTTP only; stdio (server.py) still negotiates the legacy handshake.
+# Streamable HTTP entry point — serves the stateless 2026-07-28 era over HTTP.
+# The stdio entry point (server.py) serves both eras, locked per connection.
 from server import server
 
 server.run(transport="streamable-http")

@@ -1,12 +1,10 @@
 """SDK middleware (new in v2): the low-level Server's `middleware` list.
 
-The Python SDK 2.0.0b1 gives the low-level Server a public `middleware`
-list (default: `[OpenTelemetryMiddleware()]`). Each entry is an async
+The Python SDK gives the low-level Server a public `middleware` list
+(default: `[OpenTelemetryMiddleware()]`). Each entry is an async
 callable `(ctx, call_next) -> result` that wraps EVERY inbound request and
 notification — including `initialize`, params validation, and unknown-method
 dispatch — not just tool calls. The list is ordered outermost-first.
-
-The API is marked provisional in b1; the signature may change before v2 final.
 """
 
 import asyncio

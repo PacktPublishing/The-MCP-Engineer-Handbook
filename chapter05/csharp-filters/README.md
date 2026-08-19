@@ -32,7 +32,9 @@ dotnet run
 ## Smoke test
 
 Requests are stateless 2026-07-28 era — no `initialize` handshake needed.
-Substitute your port for `5000`.
+At 2.0.0 GA the C# SDK validates the `_meta` envelope strictly (the preview-era
+leniency is gone): omit `io.modelcontextprotocol/clientCapabilities` and the
+server rejects the request with `-32602`. Substitute your port for `5000`.
 
 List tools:
 
@@ -42,7 +44,7 @@ curl -s http://localhost:5000/ -X POST \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
   -H 'Mcp-Method: tools/list' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 ```
 
 A normal tool call — succeeds, and the server console logs
@@ -54,7 +56,7 @@ curl -s http://localhost:5000/ -X POST \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
   -H 'Mcp-Method: tools/call' -H 'Mcp-Name: get_document' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 ```
 
 An admin tool call — the authorization filter blocks it with an
@@ -66,7 +68,7 @@ curl -s http://localhost:5000/ -X POST \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
   -H 'Mcp-Method: tools/call' -H 'Mcp-Name: admin_delete_document' \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"admin_delete_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"admin_delete_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 ```
 
 To see the logging filter's exception path, call `get_document` with an ID
