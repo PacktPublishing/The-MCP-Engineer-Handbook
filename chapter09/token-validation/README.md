@@ -34,7 +34,7 @@ standard JWT bearer middleware (`AddAuthentication().AddJwtBearer(...)` in
 ASP.NET Core). Nothing else in the sample changes — the audience check, the
 scope filter, and the metadata document are the parts you keep.
 
-`ModelContextProtocol.AspNetCore` 2.0.0-preview.1 also ships production
+`ModelContextProtocol.AspNetCore` 2.0.0 also ships production
 wiring for two of the three layers shown hand-rolled here:
 `McpAuthenticationHandler` (registered via
 `.AddAuthentication(...).AddMcp(...)`) serves the RFC 9728 document and adds
@@ -70,6 +70,12 @@ and a space-delimited `scope` claim.
 ## Smoke test
 
 Requests are stateless 2026-07-28 era — no `initialize` handshake needed.
+The SDK validates the `_meta` envelope strictly: requests that reach the MCP
+endpoint must carry `clientInfo`, `clientCapabilities`, and `protocolVersion`
+(a missing `clientCapabilities` is rejected with `-32602`). The auth
+middleware runs first, so the 401 demos below trigger regardless — but the
+curls all use the full envelope so the same shape works at every rung of the
+ladder.
 
 **1. No token — 401 with the discovery pointer:**
 
@@ -79,7 +85,7 @@ curl -si http://localhost:5309/mcp -X POST \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
   -H 'Mcp-Method: tools/list' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 ```
 
 ```
@@ -111,7 +117,7 @@ curl -s http://localhost:5309/mcp -X POST \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
   -H 'Mcp-Method: tools/call' -H 'Mcp-Name: read_report' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"read_report","arguments":{"id":"q1-sales"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"read_report","arguments":{"id":"q1-sales"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 ```
 
 ```json
@@ -119,15 +125,18 @@ curl -s http://localhost:5309/mcp -X POST \
 ```
 
 **4. Right audience, insufficient scope — `delete_report` with a read-only
-token (same curl shape, `Mcp-Name: delete_report`):**
+token (same curl shape, `Mcp-Name: delete_report`). Successful calls come
+back as a one-event SSE stream:**
 
-```json
-{"result":{"content":[{"type":"text","text":"Insufficient scope for 'delete_report': the token grants [reports:read] but this tool requires 'reports:admin'. Re-authorize with the missing scope."}],"isError":true},"id":3,"jsonrpc":"2.0"}
+```
+event: message
+data: {"result":{"content":[{"type":"text","text":"Insufficient scope for 'delete_report': the token grants [reports:read] but this tool requires 'reports:admin'. Re-authorize with the missing scope."}],"isError":true,"resultType":"complete","_meta":{...}},"id":3,"jsonrpc":"2.0"}
 ```
 
 **5. Full scope — mint with `--scopes "reports:read reports:admin"` and the
 same call succeeds:**
 
-```json
-{"result":{"content":[{"type":"text","text":"Deleted report 'q1-sales'."}]},"id":5,"jsonrpc":"2.0"}
+```
+event: message
+data: {"result":{"content":[{"type":"text","text":"Deleted report 'q1-sales'."}],"resultType":"complete","_meta":{...}},"id":5,"jsonrpc":"2.0"}
 ```
