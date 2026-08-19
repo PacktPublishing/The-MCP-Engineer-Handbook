@@ -30,7 +30,7 @@ must echo the request `id`, so the proxy parses the envelope there — and only
 there. That is Section 10.4.3's point about body awareness: when you finally
 need it, it's one well-specified envelope.
 
-Verified against `ModelContextProtocol.AspNetCore` 2.0.0-preview.1: the
+Verified against `ModelContextProtocol.AspNetCore` 2.0.0 (GA): the
 header contract is enforced server-side. On modern-era requests
 (`MCP-Protocol-Version: 2026-07-28`) a missing `Mcp-Method`, or a header that
 disagrees with the body, gets HTTP 400 with JSON-RPC error `-32020` from the
@@ -77,17 +77,17 @@ COMMON=(-s -X POST -H 'Content-Type: application/json' \
 # discovery — free, default pool
 curl "${COMMON[@]}" http://localhost:5100/ \
   -H 'Mcp-Method: tools/list' -H 'X-Principal: alice' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 
 # a tool call — spends alice's budget, default pool
 curl "${COMMON[@]}" http://localhost:5100/ \
   -H 'Mcp-Method: tools/call' -H 'Mcp-Name: get_document' -H 'X-Principal: alice' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 
 # an admin_* tool call — routed to the dedicated pool on 5102
 curl "${COMMON[@]}" http://localhost:5100/ \
   -H 'Mcp-Method: tools/call' -H 'Mcp-Name: admin_delete_document' -H 'X-Principal: alice' \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"admin_delete_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"admin_delete_document","arguments":{"id":"roadmap"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 ```
 
 Repeat the `get_document` call until alice's five-per-minute budget is spent.

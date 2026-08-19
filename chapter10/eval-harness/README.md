@@ -12,7 +12,7 @@ The paired-pipe wiring here exercises the whole protocol stack but not the HTTP 
 
 ## The in-memory transport APIs (verified, both SDKs)
 
-**C# (`ModelContextProtocol` 2.0.0-preview.1)** — there is no dedicated "in-memory transport" type; the seam is the *stream* transport pair, wired to two `System.IO.Pipelines.Pipe` instances (one per direction):
+**C# (`ModelContextProtocol` 2.0.0)** — there is no dedicated "in-memory transport" type; the seam is the *stream* transport pair, wired to two `System.IO.Pipelines.Pipe` instances (one per direction):
 
 ```csharp
 var clientToServer = new Pipe();
@@ -30,7 +30,7 @@ var mcp = await McpClient.CreateAsync(new StreamClientTransport(
 
 The pieces: `WithStreamServerTransport(Stream, Stream)` (hosting extension; or `ModelContextProtocol.Server.StreamServerTransport` directly), `ModelContextProtocol.Protocol.StreamClientTransport(Stream serverInput, Stream serverOutput)`, and the concrete `McpClient` class (`McpClient.CreateAsync` — the SDK has no `IMcpClient` interface). `System.IO.Pipelines` is a transitive dependency of the SDK.
 
-**TypeScript (2.0.0-beta.1)** — `InMemoryTransport.createLinkedPair(): [InMemoryTransport, InMemoryTransport]`, exported from **both** `@modelcontextprotocol/client` and `@modelcontextprotocol/server`; hand one side to `Client.connect`, the other to `McpServer.connect`. Note that a hand-wired `server.connect(...)` serves the legacy era only — the pair negotiates `2025-11-25`, which is fine for evals.
+**TypeScript (2.0.0)** — `InMemoryTransport.createLinkedPair(): [InMemoryTransport, InMemoryTransport]`, exported from **both** `@modelcontextprotocol/client` and `@modelcontextprotocol/server`; hand one side to `Client.connect`, the other to `McpServer.connect`. Note that a hand-wired `server.connect(...)` serves the legacy era only — the pair negotiates `2025-11-25` (re-verified at GA: even a client with `versionNegotiation: { mode: 'auto' }` probes `server/discover`, gets no answer, and falls back to `initialize`), which is fine for evals.
 
 ## Layout
 
@@ -74,8 +74,8 @@ Prints the pass rate for one eval task (the dud task, 0/3) over the linked in-me
 ```bash
 cd csharp/DocsServer && dotnet build
 { printf '%s\n' \
-  '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_documents","arguments":{"query":"refund"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'; \
+  '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_documents","arguments":{"query":"refund"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'; \
   sleep 3; } | dotnet bin/Debug/net10.0/DocsServer.dll 2>/dev/null
 ```
 

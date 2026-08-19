@@ -28,7 +28,8 @@ var toolsListTokens = meter.CreateHistogram<long>(
 // diagnostics primitives, so MCP telemetry is a source you subscribe to:
 // both its ActivitySource and its Meter are named
 // "Experimental.ModelContextProtocol" (the Experimental. prefix is .NET's
-// convention for pre-stable telemetry names — re-check at SDK GA).
+// convention for telemetry names whose shape may still change; the MCP SDK
+// kept it at 2.0.0 GA — verified empirically against the GA package).
 // ---------------------------------------------------------------------------
 builder.Services.AddOpenTelemetry()
     .ConfigureResource(resource => resource.AddService("otel-wiring-server"))

@@ -2,7 +2,7 @@
 // over the SDK's linked in-memory transport pair (§10.1.5), one eval task, N runs.
 //
 // InMemoryTransport.createLinkedPair() is the TS SDK's in-memory seam — exported from BOTH
-// @modelcontextprotocol/client and @modelcontextprotocol/server in 2.0.0-beta.1.
+// @modelcontextprotocol/client and @modelcontextprotocol/server in 2.0.0.
 
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { McpServer } from '@modelcontextprotocol/server';

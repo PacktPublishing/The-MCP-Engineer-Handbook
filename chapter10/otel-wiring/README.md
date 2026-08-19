@@ -12,15 +12,17 @@ to, not an SDK feature you configure.
 
 ## The SDK's telemetry names
 
-Verified against `ModelContextProtocol.Core` 2.0.0-preview.1. Both the
+Verified against `ModelContextProtocol.Core` 2.0.0 (GA). Both the
 `ActivitySource` and the `Meter` are named:
 
 ```
 Experimental.ModelContextProtocol
 ```
 
-(The `Experimental.` prefix is .NET's convention for pre-stable telemetry
-names — re-check at SDK GA.) Registration is two lines:
+(The `Experimental.` prefix is .NET's convention for telemetry names whose
+shape may still change; the MCP SDK kept it at 2.0.0 GA — the console
+exporter prints `Instrumentation scope: Experimental.ModelContextProtocol`
+for both spans and metrics.) Registration is two lines:
 
 ```csharp
 .WithTracing(t => t.AddSource("Experimental.ModelContextProtocol") ...)
@@ -97,7 +99,7 @@ curl -s http://localhost:5000/ -X POST \
   -H 'Accept: application/json, text/event-stream' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
   -H 'Mcp-Method: tools/call' -H 'Mcp-Name: get_forecast' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_forecast","arguments":{"city":"Oslo","days":5},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_forecast","arguments":{"city":"Oslo","days":5},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'
 ```
 
 `mcp.error_rung: tool_error` — the tool throws, and the response carries
