@@ -12,7 +12,7 @@ What it exposes:
   - `file://exports/{quarter}/telemetry.csv` takes **3 seconds** to read, for client deadlines.
 - **Resource templates** (§3.4.1): the book's `file://user/{id}/preferences.md` extract, plus `doc_search`, an RFC 6570 level-4 template (`docs://search{?tags*,limit}`; level-3 `{?tags,limit}` in Python) kept as a record of what each SDK does with it.
 
-All three ports list tools, resources and templates in declaration order, so every client sees the same stable catalog (and "the first resource" is always `user_guide`). Python and TypeScript do this by default. At 2.0.0 the C# SDK stores registered primitives in a hash-keyed dictionary, and .NET randomizes string hashing per process, so its lists come back in a different order on every run. The C# server therefore adds `tools/list`, `resources/list` and `resources/templates/list` filters that sort them back into declaration order.
+All three ports list tools, resources and templates in declaration order, so every client sees the same stable catalog (and "the first resource" is always `user_guide`). Python and TypeScript do this by default. At 2.0.0 the C# SDK stores registered primitives in a hash-keyed dictionary, so its lists come back in hash order. For tools that order is stable but arbitrary. Resources and templates are keyed with a comparer whose hash .NET randomizes per process, so their order changes on every run. The C# server therefore adds `tools/list`, `resources/list` and `resources/templates/list` filters that sort them back into declaration order.
 
 ## URI-template compatibility (pinned 2.0.0 SDKs)
 

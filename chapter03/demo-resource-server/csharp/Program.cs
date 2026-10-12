@@ -26,8 +26,9 @@ builder.Services
     .WithTools<DemoTools>()
     .WithResources<DemoResources>()
     // The SDK keeps registered primitives in a hash-keyed dictionary, so its lists come
-    // back in a different order on every run. Restore declaration order (the order the
-    // Python and TypeScript ports list them in) so clients see a stable catalog.
+    // back in hash order: arbitrary for tools, and different on every run for resources
+    // and templates. Restore declaration order (the order the Python and TypeScript
+    // ports list them in) so clients see a stable catalog.
     .WithRequestFilters(filters =>
     {
         var resourceOrder = DeclarationOrder<DemoResources, McpServerResourceAttribute>(
