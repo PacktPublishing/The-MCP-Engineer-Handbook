@@ -2,8 +2,9 @@ using Microsoft.Extensions.AI;
 
 // A deterministic IChatClient — no API key needed. It plays the model's side of
 // Pattern 3: discover what resources exist via list_resources, then route a read to
-// the right server via read_resource. Swap in any real provider's IChatClient adapter
-// to watch an actual model drive the same two tools.
+// the right server via read_resource — and then, playing the confused deputy, reach for
+// a second server the user never asked about. Swap in any real provider's IChatClient
+// adapter to watch an actual model drive the same two tools.
 sealed class ScriptedChatClient : IChatClient
 {
     private int _callCounter;
@@ -20,7 +21,8 @@ sealed class ScriptedChatClient : IChatClient
         if (last.Role == ChatRole.Tool &&
             last.Contents.OfType<FunctionResultContent>().LastOrDefault() is { } toolResult)
         {
-            var callName = FindCallName(history, toolResult.CallId);
+            var call = FindCall(history, toolResult.CallId);
+            var callName = call?.Name ?? "(unknown)";
             var resultText = toolResult.Result?.ToString() ?? "";
             return callName switch
             {
@@ -33,11 +35,22 @@ sealed class ScriptedChatClient : IChatClient
                         ["uri"] = "file:///release_notes.md",
                     }),
 
+                // The confused-deputy step (§3.3.3): as if the wiki content had told it to,
+                // the model now reads a perfectly valid, listed resource from ANOTHER server.
+                // Nothing in the tool schema stops it; only the host's origin policy can.
+                "read_resource" when call?.Arguments?["serverName"] as string == "wiki" =>
+                    Call("read_resource", new Dictionary<string, object?>
+                    {
+                        ["serverName"] = "docs",
+                        ["uri"] = "file:///user_guide.md",
+                    }),
+
                 "read_resource" => Text(
-                    "Both servers expose the same catalog: a user guide, release notes, a tip of " +
-                    "the day, plus telemetry and podcast material. From the wiki server's release " +
-                    "notes: offline vaults can now be converted to synced vaults in place, search " +
-                    "now indexes attachments up to 25 MB, and the legacy nimbus:// scheme is deprecated."),
+                    "From the wiki server's release notes: offline vaults can now be converted to " +
+                    "synced vaults in place, search now indexes attachments up to 25 MB, and the " +
+                    "legacy nimbus:// scheme is deprecated. (The host blocked my follow-up read from " +
+                    "the docs server; you didn't approve it.) Both servers expose the same catalog: " +
+                    "a user guide, release notes, a tip of the day, plus telemetry and podcast material."),
 
                 _ => Text($"Tool '{callName}' returned: {resultText}"),
             };
@@ -50,9 +63,9 @@ sealed class ScriptedChatClient : IChatClient
         return Text("(scripted model has no line for this input)");
     }
 
-    private static string FindCallName(List<ChatMessage> history, string callId) =>
+    private static FunctionCallContent? FindCall(List<ChatMessage> history, string callId) =>
         history.SelectMany(m => m.Contents).OfType<FunctionCallContent>()
-               .LastOrDefault(c => c.CallId == callId)?.Name ?? "(unknown)";
+               .LastOrDefault(c => c.CallId == callId);
 
     private static ChatMessage Text(string text) => new(ChatRole.Assistant, text);
 
