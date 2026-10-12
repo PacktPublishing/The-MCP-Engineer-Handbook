@@ -9,9 +9,10 @@
 //   2. the production version — size budget, MIME-type filtering, error handling for
 //      failed reads, and a depth guard against link chains — run against
 //      get_research_bundle, whose five links exercise those guards
-//   3. the same resolver's per-pass limits — byte budget, read cap, deadline — plus
-//      cycle-vs-duplicate handling, against a tool result shaped the way a careless or
-//      hostile server might return it
+//   3. the same resolver's per-pass limits — byte budget, link limit, deadline — plus
+//      cycle-vs-duplicate handling, against tool results shaped the way a careless or
+//      hostile server might return them: once a pass limit trips, the rest of the
+//      result is summarized in one notice instead of one notice per link
 //
 // Usage: node dist/client.js
 
@@ -61,20 +62,23 @@ async function main(): Promise<void> {
   });
   printBlocks('after hardened resolution', await resolver.resolve(bundleResult.content ?? [], client));
 
-  // --- 3. Per-pass limits against a tool result that misbehaves as a whole -----------
+  // --- 3. Per-pass limits against tool results that misbehave as a whole ------------
+
+  // The demo server's tools are well-behaved, so these tool results are built
+  // client-side, the way a careless or hostile server could return them. Every read
+  // still goes to the real server.
 
   console.log('='.repeat(78));
-  console.log('3. Per-pass limits on a misbehaving tool result (duplicates / understated size /');
-  console.log('   cycle / pass byte budget / read cap)');
+  console.log('3a. Per-resource guards and the pass byte budget (repeats / understated size /');
+  console.log('    multi-item read / cycle / pass byte budget)');
   console.log('='.repeat(78));
 
-  // The demo server's tools are well-behaved, so this tool result is built client-side,
-  // the way a careless or hostile server could return it. Every read still goes to the
-  // real server.
   const misbehaving: ContentBlock[] = [
     { type: 'resource_link', uri: 'file:///release_notes.md', name: 'release_notes' },
     { type: 'resource_link', uri: 'file:///release_notes.md', name: 'release_notes' }, // duplicate, not a cycle
+    { type: 'resource_link', uri: 'file:///release_notes.md', name: 'release_notes' }, // further repeat: counted only
     { type: 'resource_link', uri: 'file:///big_dataset.csv', name: 'big_dataset', size: 2048 }, // understated
+    { type: 'resource_link', uri: 'file://notes/7/attachments', name: 'note_attachments' }, // 3 items, 18 000 bytes
     { type: 'resource_link', uri: 'chain://a', name: 'chain_a' }, // a -> b -> c -> a
     { type: 'resource_link', uri: 'file:///user_guide.md', name: 'user_guide' },
     ...[1, 2, 3, 4, 5].map((id): ContentBlock => ({
@@ -84,13 +88,52 @@ async function main(): Promise<void> {
   printBlocks('tool result as returned', misbehaving);
 
   const strictResolver = new HardenedLinkResolver({
-    maxResourceBytes: 16 * 1024, // big_dataset's real 64 015 bytes -> rejected after reading
-    maxTotalBytes: 1024, // user_guide (571 bytes) no longer fits the pass budget
-    maxReads: 8, // the last preference links are never read
+    maxResourceBytes: 16 * 1024, // big_dataset's real 64 015 bytes and the 3 x 6 000-byte
+                                 // attachments -> rejected after reading
+    maxTotalBytes: 1024, // user_guide (571 bytes) no longer fits: the pass stops
     allowedMimePrefixes: ['text/', 'application/json'],
     maxDepth: 4, // deep enough that the chain's return to a is seen as a cycle
   });
   printBlocks('after hardened resolution', await strictResolver.resolve(misbehaving, client));
+
+  console.log('='.repeat(78));
+  console.log('3b. A tool result with 1 000 links (link limit)');
+  console.log('='.repeat(78));
+
+  const linkFlood: ContentBlock[] = Array.from({ length: 1000 }, (_, i): ContentBlock => ({
+    type: 'resource_link', uri: `file://user/${i + 1}/preferences.md`, name: `preferences_${i + 1}`,
+  }));
+  console.log(
+    `--- tool result as returned (${linkFlood.length} block(s): ` +
+      'file://user/1/preferences.md … file://user/1000/preferences.md) ---\n',
+  );
+
+  const floodResolver = new HardenedLinkResolver({
+    maxResourceBytes: 16 * 1024,
+    maxLinks: 4, // links 5..1000 end up in one summary notice
+    allowedMimePrefixes: ['text/'],
+    maxDepth: 2,
+  });
+  printBlocks('after hardened resolution', await floodResolver.resolve(linkFlood, client));
+
+  console.log('='.repeat(78));
+  console.log('3c. A slow read and the pass deadline');
+  console.log('='.repeat(78));
+
+  const slow: ContentBlock[] = [
+    { type: 'resource_link', uri: 'file://exports/2026-q3/telemetry.csv', name: 'telemetry_export' }, // takes 3 s
+    { type: 'resource_link', uri: 'file:///release_notes.md', name: 'release_notes' },
+    { type: 'resource_link', uri: 'file:///helpful_tip.txt', name: 'helpful_tip' },
+  ];
+  printBlocks('tool result as returned', slow);
+
+  const hurriedResolver = new HardenedLinkResolver({
+    maxResourceBytes: 16 * 1024,
+    timeoutMs: 1_000, // the export read is cancelled; the rest is summarized
+    allowedMimePrefixes: ['text/'],
+    maxDepth: 2,
+  });
+  printBlocks('after hardened resolution', await hurriedResolver.resolve(slow, client));
   await client.close();
 }
 
@@ -182,9 +225,10 @@ interface LinkResolutionOptions {
    * one tool result. Default 64 KiB. */
   maxTotalBytes?: number;
 
-  /** Maximum `resources/read` calls per pass, however many links the tool result (or
-   * the chains it starts) contains. Default 16. */
-  maxReads?: number;
+  /** Maximum links handled per pass (read, or dropped by a guard), however many the
+   * tool result (or the chains it starts) contains. Repeats of a link already handled
+   * don't count. Default 16. */
+  maxLinks?: number;
 
   /** Deadline for the whole pass, in milliseconds. A read still in flight when it
    * passes is cancelled. Default 30 000. */
@@ -204,23 +248,30 @@ interface ResolutionPass {
   deadline: AbortSignal; // aborts when the pass's time is up
   activePath: Set<string>; // URIs on the chain being followed now
   seen: Set<string>; // every URI this pass has started on
+  noted: Set<string>; // URIs that already have a repeat notice
   bytes: number; // bytes accepted from reads so far
-  reads: number; // resources/read calls issued so far
+  links: number; // links handled so far (see maxLinks)
+  stopReason?: string; // the pass limit that tripped, if any
+  skipped: number; // links left unresolved after it tripped
+  skippedUris: string[]; // the first few of them, for the summary
+  repeatsOmitted: number; // repeats beyond the first, per URI
 }
 
 // What the book page leaves out (§3.3.4): a resource link can point at ANYTHING, so
 // production resolution needs size budgets, MIME filtering for model compatibility,
 // error handling for failed reads, and guards that make link chains and link-heavy
 // results terminate. Where a guard drops a link, an explanatory text block takes its
-// place so the model knows what happened instead of silently losing context.
+// place so the model knows what happened instead of silently losing context. Once a
+// pass limit trips, the links still left get ONE summary notice instead of one each,
+// so the notices stay bounded too.
 class HardenedLinkResolver {
   private readonly maxTotalBytes: number;
-  private readonly maxReads: number;
+  private readonly maxLinks: number;
   private readonly timeoutMs: number;
 
   constructor(private readonly options: LinkResolutionOptions) {
     this.maxTotalBytes = options.maxTotalBytes ?? 64 * 1024;
-    this.maxReads = options.maxReads ?? 16;
+    this.maxLinks = options.maxLinks ?? 16;
     this.timeoutMs = options.timeoutMs ?? 30_000;
   }
 
@@ -229,10 +280,16 @@ class HardenedLinkResolver {
       deadline: AbortSignal.timeout(this.timeoutMs),
       activePath: new Set(),
       seen: new Set(),
+      noted: new Set(),
       bytes: 0,
-      reads: 0,
+      links: 0,
+      skipped: 0,
+      skippedUris: [],
+      repeatsOmitted: 0,
     };
-    return this.resolveAtDepth(content, client, 1, pass);
+    const resolved = await this.resolveAtDepth(content, client, 1, pass);
+    resolved.push(...summary(pass));
+    return resolved;
   }
 
   private async resolveAtDepth(
@@ -252,24 +309,35 @@ class HardenedLinkResolver {
   private async resolveOneLink(
     link: ResourceLink, client: Client, depth: number, pass: ResolutionPass,
   ): Promise<ContentBlock[]> {
+    // A pass limit has tripped: the rest of the result goes into the summary.
+    if (pass.stopReason !== undefined) {
+      return skip(link, pass);
+    }
+
     console.log(`  [resolve] ${link.uri} (depth ${depth})`);
+
+    // Cycle vs. duplicate: only a URI on the chain currently being followed is a
+    // cycle. Two links to the same URI side by side, or two chains converging on one
+    // resource, are ordinary repetition: point at the earlier result, don't re-read.
+    if (pass.seen.has(link.uri) && !pass.activePath.has(link.uri)) {
+      return duplicate(link, pass);
+    }
+
+    // Link limit: bound the pass as a whole, however many links it holds.
+    if (pass.links >= this.maxLinks) {
+      return stop(link, pass, `link limit of ${this.maxLinks} per pass reached`);
+    }
+    pass.links++;
 
     // Depth guard: link chains must terminate.
     if (depth > this.options.maxDepth) {
       return drop(link, `chain depth ${depth} exceeds the maximum of ${this.options.maxDepth}`);
     }
-
-    // Cycle vs. duplicate: only a URI on the chain currently being followed is a
-    // cycle. Two links to the same URI side by side, or two chains converging on one
-    // resource, are ordinary repetition: point at the earlier result, don't re-read.
     if (pass.activePath.has(link.uri)) {
       return drop(link, 'link cycle detected — this URI is already being resolved further up the chain');
     }
-    if (pass.seen.has(link.uri)) {
-      return duplicate(link);
-    }
-    pass.seen.add(link.uri);
 
+    pass.seen.add(link.uri);
     pass.activePath.add(link.uri);
     try {
       return await this.readAndSubstitute(link, client, depth, pass);
@@ -291,14 +359,10 @@ class HardenedLinkResolver {
       return drop(link, `declared MIME type '${link.mimeType}' is not model-compatible`);
     }
 
-    // Read cap and deadline: bound the pass as a whole, however many links it holds.
-    if (pass.reads >= this.maxReads) {
-      return drop(link, `read limit of ${this.maxReads} per pass reached`);
-    }
+    // Deadline: bound the pass in time as well.
     if (pass.deadline.aborted) {
-      return drop(link, `pass deadline of ${this.timeoutMs / 1000}s has passed`);
+      return stop(link, pass, `pass deadline of ${this.timeoutMs / 1000}s has passed`);
     }
-    pass.reads++;
 
     // Error handling: a link is a promise the server doesn't have to keep.
     let read;
@@ -306,7 +370,8 @@ class HardenedLinkResolver {
       read = await client.readResource({ uri: link.uri }, { signal: pass.deadline });
     } catch (error) {
       if (pass.deadline.aborted) {
-        return drop(link, `read cancelled: pass deadline of ${this.timeoutMs / 1000}s has passed`);
+        pass.stopReason = `pass deadline of ${this.timeoutMs / 1000}s has passed`;
+        return drop(link, `read cancelled: ${pass.stopReason}`);
       }
       if (!(error instanceof ProtocolError)) throw error;
       return drop(link, `read failed: ${error.message}`);
@@ -321,6 +386,7 @@ class HardenedLinkResolver {
       return drop(link, `content size ${readBytes}${declared(link)} exceeds the budget of ${this.options.maxResourceBytes} bytes`);
     }
     if (pass.bytes + readBytes > this.maxTotalBytes) {
+      pass.stopReason = `pass budget of ${this.maxTotalBytes} bytes reached`;
       return drop(link, `content size ${readBytes} would exceed the pass budget of ${this.maxTotalBytes} bytes (${pass.bytes} already used)`);
     }
     pass.bytes += readBytes;
@@ -398,8 +464,15 @@ function drop(link: ResourceLink, reason: string): ContentBlock[] {
   ];
 }
 
-// A repeated link is not an error: refer the model to the earlier occurrence.
-function duplicate(link: ResourceLink): ContentBlock[] {
+// A repeated link is not an error: refer the model to the earlier occurrence — once per
+// URI. Further repeats are only counted, for the summary.
+function duplicate(link: ResourceLink, pass: ResolutionPass): ContentBlock[] {
+  if (pass.noted.has(link.uri)) {
+    console.log(`  [dedupe]  ${link.uri}: repeat omitted (counted for the summary)`);
+    pass.repeatsOmitted++;
+    return [];
+  }
+  pass.noted.add(link.uri);
   console.log(`  [dedupe]  ${link.uri}: already handled earlier in this pass`);
   return [
     {
@@ -409,6 +482,46 @@ function duplicate(link: ResourceLink): ContentBlock[] {
         'see its content, or why it was not resolved, above]',
     },
   ];
+}
+
+// A pass limit trips: no more reads this pass, and this link is the first one left.
+function stop(link: ResourceLink, pass: ResolutionPass, reason: string): ContentBlock[] {
+  console.log(`  [limit]   ${reason}: the remaining links are summarized`);
+  pass.stopReason = reason;
+  return skip(link, pass);
+}
+
+function skip(link: ResourceLink, pass: ResolutionPass): ContentBlock[] {
+  pass.skipped++;
+  if (pass.skippedUris.length < 3 && !pass.skippedUris.includes(link.uri)) {
+    pass.skippedUris.push(link.uri);
+  }
+  return [];
+}
+
+// One notice for everything a tripped limit left unresolved, and one for omitted
+// repeats — however many links that is.
+function summary(pass: ResolutionPass): ContentBlock[] {
+  const notices: ContentBlock[] = [];
+  if (pass.skipped > 0) {
+    const more = pass.skipped - pass.skippedUris.length;
+    const uris = pass.skippedUris.join(', ') + (more > 0 ? ` and ${more} more` : '');
+    console.log(`  [summary] ${pass.skipped} further link(s) not resolved: ${pass.stopReason}`);
+    notices.push({
+      type: 'text',
+      text:
+        `[${pass.skipped} further resource link(s) in this result were not resolved: ` +
+        `${pass.stopReason}. Not resolved: ${uris}]`,
+    });
+  }
+  if (pass.repeatsOmitted > 0) {
+    console.log(`  [summary] ${pass.repeatsOmitted} further repeat(s) omitted`);
+    notices.push({
+      type: 'text',
+      text: `[${pass.repeatsOmitted} further repeat(s) of resource links already handled above were omitted]`,
+    });
+  }
+  return notices;
 }
 
 await main();

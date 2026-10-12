@@ -9,9 +9,10 @@
 #   2. the production version — size budget, MIME-type filtering, error handling for
 #      failed reads, and a depth guard against link chains — run against
 #      get_research_bundle, whose five links exercise those guards
-#   3. the same resolver's per-pass limits — byte budget, read cap, deadline — plus
-#      cycle-vs-duplicate handling, against a tool result shaped the way a careless or
-#      hostile server might return it
+#   3. the same resolver's per-pass limits — byte budget, link limit, deadline — plus
+#      cycle-vs-duplicate handling, against tool results shaped the way a careless or
+#      hostile server might return them: once a pass limit trips, the rest of the
+#      result is summarized in one notice instead of one notice per link
 #
 # Usage: uv run client.py
 import asyncio
@@ -65,19 +66,23 @@ async def main() -> None:
         ))
         print_blocks("after hardened resolution", await resolver.resolve(bundle_result.content, client))
 
-        # --- 3. Per-pass limits against a tool result that misbehaves as a whole -----
+        # --- 3. Per-pass limits against tool results that misbehave as a whole -----
+
+        # The demo server's tools are well-behaved, so these tool results are built
+        # client-side, the way a careless or hostile server could return them. Every
+        # read still goes to the real server.
+
         print("=" * 78)
-        print("3. Per-pass limits on a misbehaving tool result (duplicates / understated size /")
-        print("   cycle / pass byte budget / read cap)")
+        print("3a. Per-resource guards and the pass byte budget (repeats / understated size /")
+        print("    multi-item read / cycle / pass byte budget)")
         print("=" * 78)
 
-        # The demo server's tools are well-behaved, so this tool result is built
-        # client-side, the way a careless or hostile server could return it. Every read
-        # still goes to the real server.
         misbehaving: list[ContentBlock] = [
             _link("file:///release_notes.md", "release_notes"),
             _link("file:///release_notes.md", "release_notes"),  # duplicate, not a cycle
+            _link("file:///release_notes.md", "release_notes"),  # further repeat: counted only
             _link("file:///big_dataset.csv", "big_dataset", size=2048),  # understated
+            _link("file://notes/7/attachments", "note_attachments"),  # 3 items, 18 000 bytes
             _link("chain://a", "chain_a"),  # a -> b -> c -> a
             _link("file:///user_guide.md", "user_guide"),
             *(_link(f"file://user/{id}/preferences.md", f"preferences_{id}") for id in range(1, 6)),
@@ -85,13 +90,44 @@ async def main() -> None:
         print_blocks("tool result as returned", misbehaving)
 
         strict_resolver = HardenedLinkResolver(LinkResolutionOptions(
-            max_resource_bytes=16 * 1024,  # big_dataset's real 64 015 bytes -> rejected after reading
-            max_total_bytes=1024,          # user_guide (571 bytes) no longer fits the pass budget
-            max_reads=8,                   # the last preference links are never read
+            max_resource_bytes=16 * 1024,  # big_dataset's real 64 015 bytes and the 3 x 6 000-byte
+                                           # attachments -> rejected after reading
+            max_total_bytes=1024,          # user_guide (571 bytes) no longer fits: the pass stops
             allowed_mime_prefixes=["text/", "application/json"],
             max_depth=4,                   # deep enough that the chain's return to a is seen as a cycle
         ))
         print_blocks("after hardened resolution", await strict_resolver.resolve(misbehaving, client))
+
+        print("=" * 78)
+        print("3b. A tool result with 1 000 links (link limit)")
+        print("=" * 78)
+
+        link_flood: list[ContentBlock] = [
+            _link(f"file://user/{id}/preferences.md", f"preferences_{id}") for id in range(1, 1001)
+        ]
+        print(f"--- tool result as returned ({len(link_flood)} block(s): "
+              "file://user/1/preferences.md … file://user/1000/preferences.md) ---\n")
+
+        flood_resolver = HardenedLinkResolver(LinkResolutionOptions(
+            max_links=4,  # links 5..1000 end up in one summary notice
+        ))
+        print_blocks("after hardened resolution", await flood_resolver.resolve(link_flood, client))
+
+        print("=" * 78)
+        print("3c. A slow read and the pass deadline")
+        print("=" * 78)
+
+        slow: list[ContentBlock] = [
+            _link("file://exports/2026-q3/telemetry.csv", "telemetry_export"),  # takes 3 s
+            _link("file:///release_notes.md", "release_notes"),
+            _link("file:///helpful_tip.txt", "helpful_tip"),
+        ]
+        print_blocks("tool result as returned", slow)
+
+        hurried_resolver = HardenedLinkResolver(LinkResolutionOptions(
+            timeout=1.0,  # the export read is cancelled; the rest is summarized
+        ))
+        print_blocks("after hardened resolution", await hurried_resolver.resolve(slow, client))
 
 
 def _link(uri: str, name: str, size: int | None = None) -> ResourceLink:
@@ -139,9 +175,10 @@ class LinkResolutionOptions:
     # one tool result.
     max_total_bytes: int = 64 * 1024
 
-    # Maximum resources/read calls per pass, however many links the tool result (or
-    # the chains it starts) contains.
-    max_reads: int = 16
+    # Maximum links handled per pass (read, or dropped by a guard), however many the
+    # tool result (or the chains it starts) contains. Repeats of a link already
+    # handled don't count.
+    max_links: int = 16
 
     # Deadline for the whole pass, in seconds. A read still in flight when it passes
     # is cancelled.
@@ -162,15 +199,22 @@ class ResolutionPass:
     deadline: float  # event-loop time at which the pass gives up
     active_path: set[str] = field(default_factory=set)  # URIs on the chain being followed now
     seen: set[str] = field(default_factory=set)  # every URI this pass has started on
+    noted: set[str] = field(default_factory=set)  # URIs that already have a repeat notice
     bytes: int = 0  # bytes accepted from reads so far
-    reads: int = 0  # resources/read calls issued so far
+    links: int = 0  # links handled so far (see max_links)
+    stop_reason: str | None = None  # the pass limit that tripped, if any
+    skipped: int = 0  # links left unresolved after it tripped
+    skipped_uris: list[str] = field(default_factory=list)  # the first few of them, for the summary
+    repeats_omitted: int = 0  # repeats beyond the first, per URI
 
 
 # What the book page leaves out (§3.3.4): a resource link can point at ANYTHING, so
 # production resolution needs size budgets, MIME filtering for model compatibility,
 # error handling for failed reads, and guards that make link chains and link-heavy
 # results terminate. Where a guard drops a link, an explanatory text block takes its
-# place so the model knows what happened instead of silently losing context.
+# place so the model knows what happened instead of silently losing context. Once a
+# pass limit trips, the links still left get ONE summary notice instead of one each,
+# so the notices stay bounded too.
 class HardenedLinkResolver:
     def __init__(self, options: LinkResolutionOptions) -> None:
         self._options = options
@@ -179,7 +223,10 @@ class HardenedLinkResolver:
         self, content: list[ContentBlock], client: Client
     ) -> list[ContentBlock]:
         deadline = asyncio.get_running_loop().time() + self._options.timeout
-        return await self._resolve_at_depth(content, client, 1, ResolutionPass(deadline))
+        pass_ = ResolutionPass(deadline)
+        resolved = await self._resolve_at_depth(content, client, 1, pass_)
+        resolved.extend(_summary(pass_))
+        return resolved
 
     async def _resolve_at_depth(
         self, content: list[ContentBlock], client: Client, depth: int, pass_: ResolutionPass
@@ -196,21 +243,31 @@ class HardenedLinkResolver:
         self, link: ResourceLink, client: Client, depth: int, pass_: ResolutionPass
     ) -> list[ContentBlock]:
         options = self._options
-        print(f"  [resolve] {link.uri} (depth {depth})")
 
-        # Depth guard: link chains must terminate.
-        if depth > options.max_depth:
-            return _drop(link, f"chain depth {depth} exceeds the maximum of {options.max_depth}")
+        # A pass limit has tripped: the rest of the result goes into the summary.
+        if pass_.stop_reason is not None:
+            return _skip(link, pass_)
+
+        print(f"  [resolve] {link.uri} (depth {depth})")
 
         # Cycle vs. duplicate: only a URI on the chain currently being followed is a
         # cycle. Two links to the same URI side by side, or two chains converging on one
         # resource, are ordinary repetition: point at the earlier result, don't re-read.
+        if link.uri in pass_.seen and link.uri not in pass_.active_path:
+            return _duplicate(link, pass_)
+
+        # Link limit: bound the pass as a whole, however many links it holds.
+        if pass_.links >= options.max_links:
+            return _stop(link, pass_, f"link limit of {options.max_links} per pass reached")
+        pass_.links += 1
+
+        # Depth guard: link chains must terminate.
+        if depth > options.max_depth:
+            return _drop(link, f"chain depth {depth} exceeds the maximum of {options.max_depth}")
         if link.uri in pass_.active_path:
             return _drop(link, "link cycle detected — this URI is already being resolved further up the chain")
-        if link.uri in pass_.seen:
-            return _duplicate(link)
-        pass_.seen.add(link.uri)
 
+        pass_.seen.add(link.uri)
         pass_.active_path.add(link.uri)
         try:
             return await self._read_and_substitute(link, client, depth, pass_)
@@ -233,12 +290,9 @@ class HardenedLinkResolver:
         if link.mime_type is not None and not self._mime_allowed(link.mime_type):
             return _drop(link, f"declared MIME type '{link.mime_type}' is not model-compatible")
 
-        # Read cap and deadline: bound the pass as a whole, however many links it holds.
-        if pass_.reads >= options.max_reads:
-            return _drop(link, f"read limit of {options.max_reads} per pass reached")
+        # Deadline: bound the pass in time as well.
         if asyncio.get_running_loop().time() >= pass_.deadline:
-            return _drop(link, f"pass deadline of {options.timeout:g}s has passed")
-        pass_.reads += 1
+            return _stop(link, pass_, f"pass deadline of {options.timeout:g}s has passed")
 
         # Error handling: a link is a promise the server doesn't have to keep.
         try:
@@ -247,7 +301,8 @@ class HardenedLinkResolver:
         except MCPError as error:
             return _drop(link, f"read failed: {error}")
         except TimeoutError:
-            return _drop(link, f"read cancelled: pass deadline of {options.timeout:g}s has passed")
+            pass_.stop_reason = f"pass deadline of {options.timeout:g}s has passed"
+            return _drop(link, f"read cancelled: {pass_.stop_reason}")
 
         # Size budget, part 2: links may omit or understate their size, so count what the
         # read actually returned — across ALL its content items, since one resource can
@@ -261,6 +316,7 @@ class HardenedLinkResolver:
                 f"{options.max_resource_bytes} bytes",
             )
         if pass_.bytes + read_bytes > options.max_total_bytes:
+            pass_.stop_reason = f"pass budget of {options.max_total_bytes} bytes reached"
             return _drop(
                 link,
                 f"content size {read_bytes} would exceed the pass budget of "
@@ -336,8 +392,14 @@ def _drop(link: ResourceLink, reason: str) -> list[ContentBlock]:
     ]
 
 
-# A repeated link is not an error: refer the model to the earlier occurrence.
-def _duplicate(link: ResourceLink) -> list[ContentBlock]:
+# A repeated link is not an error: refer the model to the earlier occurrence — once per
+# URI. Further repeats are only counted, for the summary.
+def _duplicate(link: ResourceLink, pass_: ResolutionPass) -> list[ContentBlock]:
+    if link.uri in pass_.noted:
+        print(f"  [dedupe]  {link.uri}: repeat omitted (counted for the summary)")
+        pass_.repeats_omitted += 1
+        return []
+    pass_.noted.add(link.uri)
     print(f"  [dedupe]  {link.uri}: already handled earlier in this pass")
     return [
         TextContent(
@@ -346,6 +408,42 @@ def _duplicate(link: ResourceLink) -> list[ContentBlock]:
             "see its content, or why it was not resolved, above]",
         )
     ]
+
+
+# A pass limit trips: no more reads this pass, and this link is the first one left.
+def _stop(link: ResourceLink, pass_: ResolutionPass, reason: str) -> list[ContentBlock]:
+    print(f"  [limit]   {reason}: the remaining links are summarized")
+    pass_.stop_reason = reason
+    return _skip(link, pass_)
+
+
+def _skip(link: ResourceLink, pass_: ResolutionPass) -> list[ContentBlock]:
+    pass_.skipped += 1
+    if len(pass_.skipped_uris) < 3 and link.uri not in pass_.skipped_uris:
+        pass_.skipped_uris.append(link.uri)
+    return []
+
+
+# One notice for everything a tripped limit left unresolved, and one for omitted
+# repeats — however many links that is.
+def _summary(pass_: ResolutionPass) -> list[ContentBlock]:
+    notices: list[ContentBlock] = []
+    if pass_.skipped > 0:
+        more = pass_.skipped - len(pass_.skipped_uris)
+        uris = ", ".join(pass_.skipped_uris) + (f" and {more} more" if more > 0 else "")
+        print(f"  [summary] {pass_.skipped} further link(s) not resolved: {pass_.stop_reason}")
+        notices.append(TextContent(
+            type="text",
+            text=f"[{pass_.skipped} further resource link(s) in this result were not resolved: "
+            f"{pass_.stop_reason}. Not resolved: {uris}]",
+        ))
+    if pass_.repeats_omitted > 0:
+        print(f"  [summary] {pass_.repeats_omitted} further repeat(s) omitted")
+        notices.append(TextContent(
+            type="text",
+            text=f"[{pass_.repeats_omitted} further repeat(s) of resource links already handled above were omitted]",
+        ))
+    return notices
 
 
 def print_blocks(label: str, blocks: list[ContentBlock]) -> None:
