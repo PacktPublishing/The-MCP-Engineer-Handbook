@@ -7,6 +7,9 @@ What it exposes:
 - **Text/markdown resources** (§3.1): a user guide, release notes, and a tip of the day for a fictional notes app.
 - **A tool returning a resource link** (§3.3.2): `get_tip_of_the_day` returns a `ResourceLinkBlock` pointing at `file:///helpful_tip.txt` — the book extract, verbatim.
 - **Deliberately awkward resources** for the link-resolution hardening demo (§3.3.4): an oversized CSV (declared `size` 64 000), a binary `audio/wav` blob, and a three-hop link chain (`chain://a` → `b` → `c` → back to `a`) whose hops tunnel onward links as JSON content. `get_research_bundle` returns links to all of them plus one dangling link.
+- **Two more for the resolver's per-pass limits** (§3.3.4), registered as templates so they stay out of `resources/list` (which the other client samples show to the model):
+  - `file://notes/{id}/attachments` returns **three content items** of 6 000 bytes each from one read. Each fits a 16 KiB per-resource budget; the total doesn't. Python's `MCPServer` maps a resource function to a single content item, so the Python port serves this URI by overriding `read_resource`, and therefore doesn't advertise it in `resources/templates/list`.
+  - `file://exports/{quarter}/telemetry.csv` takes **3 seconds** to read, for client deadlines.
 - **Resource templates** (§3.4.1): the book's `file://user/{id}/preferences.md` extract, plus `doc_search`, an RFC 6570 level-4 template (`docs://search{?tags*,limit}`; level-3 `{?tags,limit}` in Python) kept as a record of what each SDK does with it.
 
 ## URI-template compatibility (pinned 2.0.0 SDKs)

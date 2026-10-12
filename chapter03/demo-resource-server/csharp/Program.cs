@@ -177,6 +177,38 @@ public class DemoResources
      Description("Third hop of the link chain — points back to chain://a.")]
     public static string ChainC() => """{"type":"resource_link","uri":"chain://a","name":"chain_a"}""";
 
+    // Two more for the resolver's per-pass limits. They are templates rather than fixed
+    // resources so they stay out of resources/list, which the other chapter 3 samples
+    // show to the model.
+
+    public const int AttachmentSize = 6_000;
+
+    // ONE read, several content items: each attachment fits a 16 KiB per-resource
+    // budget on its own, but the three together don't.
+    [McpServerResource(UriTemplate = "file://notes/{id}/attachments", Name = "note_attachments",
+        MimeType = "text/markdown"),
+     Description("Every attachment of a note, one content item each (3 x 6 000 bytes).")]
+    public static IEnumerable<ResourceContents> NoteAttachments(
+        RequestContext<ReadResourceRequestParams> requestContext, int id) =>
+        Enumerable.Range(1, 3).Select(n => new TextResourceContents
+        {
+            Uri = requestContext.Params!.Uri!,
+            MimeType = "text/markdown",
+            Text = ($"# Attachment {n} of note {id}\n\n" +
+                    string.Concat(Enumerable.Repeat("Transcript excerpt. ", 300)))[..AttachmentSize],
+        });
+
+    // A slow read: the export is "generated on demand" and takes three seconds — longer
+    // than the deadline the resource-link-client's last pass allows.
+    [McpServerResource(UriTemplate = "file://exports/{quarter}/telemetry.csv", Name = "telemetry_export",
+        MimeType = "text/csv"),
+     Description("A telemetry export generated on demand. Deliberately slow (3 s) to exercise client deadlines.")]
+    public static async Task<string> TelemetryExport(string quarter, CancellationToken cancellationToken)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+        return $"quarter,active_users\n{quarter},1234\n";
+    }
+
     // --- Resource templates (§3.4.1) -------------------------------------------------
 
     // Book extract (§3.4.1): the attribute declares the template; the SDK routes any

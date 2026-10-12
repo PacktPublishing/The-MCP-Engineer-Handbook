@@ -4,12 +4,34 @@
 # a tool that returns a resource link instead of content (§3.3.2), and a handful of
 # deliberately awkward resources (oversized, binary, broken, chained links) that the
 # resource-link-client sample uses to exercise its hardened link resolution (§3.3.4).
+import asyncio
 import json
+import re
+from typing import Any
 
 from mcp.server import MCPServer
+from mcp.server.lowlevel.helper_types import ReadResourceContents
 from mcp_types import ResourceLink
 
-server = MCPServer(name="demo-resource-server", version="0.1.0")
+ATTACHMENT_SIZE = 6_000
+NOTE_ATTACHMENTS = re.compile(r"file://notes/(\d+)/attachments")
+
+
+class DemoServer(MCPServer):
+    # MCPServer maps a resource function's return value to ONE content item. The
+    # note_attachments read returns several (one per attachment), so it overrides
+    # read_resource for those URIs. Unlike the C# and TypeScript templates, it is
+    # therefore not advertised in resources/templates/list.
+    async def read_resource(self, uri: Any, context: Any = None) -> Any:
+        if match := NOTE_ATTACHMENTS.fullmatch(str(uri)):
+            return [
+                ReadResourceContents(content=note_attachment(int(match[1]), n), mime_type="text/markdown")
+                for n in (1, 2, 3)
+            ]
+        return await super().read_resource(uri, context)
+
+
+server = DemoServer(name="demo-resource-server", version="0.1.0")
 
 # --- Tools ---------------------------------------------------------------------------
 
@@ -184,6 +206,29 @@ def chain_b() -> str:
 )
 def chain_c() -> str:
     return '{"type":"resource_link","uri":"chain://a","name":"chain_a"}'
+
+
+# Two more for the resolver's per-pass limits. They are templates rather than fixed
+# resources so they stay out of resources/list, which the other chapter 3 samples show
+# to the model.
+
+
+# ONE read, several content items: each attachment fits a 16 KiB per-resource budget on
+# its own, but the three together don't. Served by DemoServer.read_resource above, for
+# file://notes/{id}/attachments.
+def note_attachment(id: int, n: int) -> str:
+    return (f"# Attachment {n} of note {id}\n\n" + "Transcript excerpt. " * 300)[:ATTACHMENT_SIZE]
+
+
+# A slow read: the export is "generated on demand" and takes three seconds — longer
+# than the deadline the resource-link-client's last pass allows.
+@server.resource(
+    "file://exports/{quarter}/telemetry.csv", name="telemetry_export", mime_type="text/csv",
+    description="A telemetry export generated on demand. Deliberately slow (3 s) to exercise client deadlines.",
+)
+async def telemetry_export(quarter: str) -> str:
+    await asyncio.sleep(3)
+    return f"quarter,active_users\n{quarter},1234\n"
 
 
 # --- Resource templates (§3.4.1) --------------------------------------------------------

@@ -41,6 +41,7 @@ const HELPFUL_TIP =
 // --- Awkward resources for the link-resolution hardening demo ---------------------
 
 export const BIG_DATASET_SIZE = 64_000;
+export const ATTACHMENT_SIZE = 6_000;
 
 function bigDataset(): string {
   let csv = 'day,active_users,notes_created,sync_errors\n';
@@ -150,6 +151,41 @@ serveStdio(() => {
     { description: 'Third hop of the link chain — points back to chain://a.', mimeType: 'application/json' },
     async (uri) =>
       textResource(uri.href, 'application/json', '{"type":"resource_link","uri":"chain://a","name":"chain_a"}'),
+  );
+
+  // Two more for the resolver's per-pass limits. They are templates rather than fixed
+  // resources so they stay out of resources/list, which the other chapter 3 samples
+  // show to the model.
+
+  // ONE read, several content items: each attachment fits a 16 KiB per-resource budget
+  // on its own, but the three together don't.
+  server.registerResource(
+    'note_attachments',
+    new ResourceTemplate('file://notes/{id}/attachments', { list: undefined }),
+    { description: 'Every attachment of a note, one content item each (3 x 6 000 bytes).', mimeType: 'text/markdown' },
+    async (uri, variables) => {
+      const id = Number(variables.id);
+      if (!Number.isInteger(id)) throw new Error(`Invalid note id: '${variables.id}'`);
+      return {
+        contents: [1, 2, 3].map((n) => ({
+          uri: uri.href,
+          mimeType: 'text/markdown',
+          text: (`# Attachment ${n} of note ${id}\n\n` + 'Transcript excerpt. '.repeat(300)).slice(0, ATTACHMENT_SIZE),
+        })),
+      };
+    },
+  );
+
+  // A slow read: the export is "generated on demand" and takes three seconds — longer
+  // than the deadline the resource-link-client's last pass allows.
+  server.registerResource(
+    'telemetry_export',
+    new ResourceTemplate('file://exports/{quarter}/telemetry.csv', { list: undefined }),
+    { description: 'A telemetry export generated on demand. Deliberately slow (3 s) to exercise client deadlines.', mimeType: 'text/csv' },
+    async (uri, variables) => {
+      await new Promise((resolve) => setTimeout(resolve, 3_000));
+      return textResource(uri.href, 'text/csv', `quarter,active_users\n${variables.quarter},1234\n`);
+    },
   );
 
   // --- Resource templates (§3.4.1) -------------------------------------------------
