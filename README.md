@@ -1,16 +1,16 @@
 # The MCP Engineering Handbook — Companion Samples
 
-Code samples for the book, written against the **2026-07-28 MCP specification** using the v2 GA SDKs. Every project was rebuilt and smoke-tested on the GA releases (2026-08-19).
+Code samples for the book, written against the **2026-07-28 MCP specification** using the v2 GA SDKs. Every project was rebuilt and smoke-tested on the GA releases (2026-08-19); the TypeScript projects were re-run on 2.2.0 (2026-10-12).
 
 ## SDK pins
 
-GA versions are pinned exactly.
+Versions are pinned exactly. C# and Python are on the 2.0.0 GA. TypeScript moved to **2.2.0**: `@modelcontextprotocol/client` 2.0.0–2.1.x is affected by [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (the OAuth client could send credentials to an authorization server the MCP server names). No sample uses the OAuth client, but samples get copied; the server package moved with the client so the two stay in lockstep.
 
 | Language | Package | Version |
 |---|---|---|
 | C# | `ModelContextProtocol` (+ `.AspNetCore` where used; `.Extensions.Tasks` for the tasks extension) | `2.0.0` |
 | Python | `mcp` | `2.0.0` |
-| TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` | `2.0.0` |
+| TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` (`@modelcontextprotocol/node` 2.1.0 for the Node HTTP adapter in `chapter01/http-server`) | `2.2.0` |
 
 Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. Two deliberate exceptions ride the v1 `mcp`/`sdk` line because their extension ecosystems have not adopted v2: `chapter07/health-dashboard` (ext-apps) and `chapter12/agent-as-mcp` (Microsoft Agent Framework) — see their READMEs.
 

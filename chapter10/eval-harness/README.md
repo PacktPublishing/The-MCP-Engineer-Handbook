@@ -30,7 +30,7 @@ var mcp = await McpClient.CreateAsync(new StreamClientTransport(
 
 The pieces: `WithStreamServerTransport(Stream, Stream)` (hosting extension; or `ModelContextProtocol.Server.StreamServerTransport` directly), `ModelContextProtocol.Protocol.StreamClientTransport(Stream serverInput, Stream serverOutput)`, and the concrete `McpClient` class (`McpClient.CreateAsync` — the SDK has no `IMcpClient` interface). `System.IO.Pipelines` is a transitive dependency of the SDK.
 
-**TypeScript (2.0.0)** — `InMemoryTransport.createLinkedPair(): [InMemoryTransport, InMemoryTransport]`, exported from **both** `@modelcontextprotocol/client` and `@modelcontextprotocol/server`; hand one side to `Client.connect`, the other to `McpServer.connect`. Note that a hand-wired `server.connect(...)` serves the legacy era only — the pair negotiates `2025-11-25` (re-verified at GA: even a client with `versionNegotiation: { mode: 'auto' }` probes `server/discover`, gets no answer, and falls back to `initialize`), which is fine for evals.
+**TypeScript (2.2.0)** — `InMemoryTransport.createLinkedPair(): [InMemoryTransport, InMemoryTransport]`, exported from **both** `@modelcontextprotocol/client` and `@modelcontextprotocol/server`; hand one side to `Client.connect`, the other to `McpServer.connect`. Note that a hand-wired `server.connect(...)` serves the legacy era only — the pair negotiates `2025-11-25` (re-verified at GA and at 2.2.0: even a client with `versionNegotiation: { mode: 'auto' }` probes `server/discover`, gets no answer, and falls back to `initialize`), which is fine for evals.
 
 ## Layout
 
