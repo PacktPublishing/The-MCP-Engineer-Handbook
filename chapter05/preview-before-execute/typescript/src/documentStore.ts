@@ -1,17 +1,23 @@
 import type { FindReplacePlan } from './findReplacePlanner.js';
 
-// A document in the store. version is bumped on every write; previews record
-// the version they were computed against so a stale preview is detectable.
+// An immutable snapshot of one document version. A write never changes a
+// Document; it replaces it in the store with a new one whose version is one
+// higher. lines and version therefore always describe the same content, and a
+// preview records the version it was computed against so a stale preview is
+// detectable.
 export interface Document {
-  id: string;
-  lines: string[];
-  version: number;
+  readonly id: string;
+  readonly lines: readonly string[];
+  readonly version: number;
 }
 
 // In-memory stand-in for the document service this MCP server wraps.
 export class DocumentStore {
   private readonly documents = new Map<string, Document>(seed().map((d) => [d.id, d]));
 
+  // A consistent snapshot of every document. Node runs this synchronously, so
+  // no write can interleave; the immutable documents keep it valid afterwards
+  // too, because later writes replace them rather than editing them.
   all(): Document[] {
     return [...this.documents.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   }
@@ -31,8 +37,9 @@ export class DocumentStore {
 
     for (const edit of plan.documents) {
       const doc = this.documents.get(edit.documentId)!;
-      for (const line of edit.lines) doc.lines[line.lineNumber - 1] = line.after;
-      doc.version++;
+      const lines = [...doc.lines];
+      for (const line of edit.lines) lines[line.lineNumber - 1] = line.after;
+      this.documents.set(edit.documentId, { ...doc, lines, version: doc.version + 1 });
     }
 
     return null;

@@ -1,6 +1,7 @@
 // Computes a find-and-replace plan and renders it for the model. The plan is
-// the single source of truth for both the preview text and the execution, so
-// what was previewed is exactly what runs.
+// the single source of truth for both the preview text and the execution: a
+// stored plan (the preview-token variant) runs exactly as previewed, or not at
+// all if a document changed in between.
 
 import type { DocumentStore } from './documentStore.js';
 
@@ -32,6 +33,8 @@ export function totalOccurrences(plan: FindReplacePlan): number {
 }
 
 export function buildPlan(store: DocumentStore, find: string, replace: string): FindReplacePlan {
+  // One snapshot: each edit's lines and version come from the same immutable
+  // document, so a plan never pairs old text with a new version.
   const documentEdits: DocumentEdit[] = [];
   for (const doc of store.all()) {
     const lineEdits: LineEdit[] = [];
