@@ -1,0 +1,56 @@
+{
+  "manifest_version": "0.3",
+  "name": "weather-alerts",
+  "display_name": "Weather Alerts",
+  "version": "1.0.0",
+  "description": "MCP server providing weather alerts for any location.",
+  "author": {
+    "name": "Weather Corp",
+    "url": "https://weathercorp.example.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/weathercorp/weather-alerts-mcp",
+  "documentation": "https://weathercorp.example.com/docs/mcp",
+  "support": "https://github.com/weathercorp/weather-alerts-mcp/issues",
+
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": {
+        "WEATHER_API_KEY": "${user_config.api_key}",
+        "CACHE_TTL": "300"
+      }
+    }
+  },
+
+  "tools": [
+    { "name": "get_alerts", "description": "Returns active weather alerts for a city" }
+  ],
+
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Weather API Key",
+      "description": "Your API key from weathercorp.example.com/developers",
+      "required": true,
+      "sensitive": true
+    }
+  },
+
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+
+  "icon": "icon.png",
+  "icons": [
+    { "src": "icon.png", "size": "512x512" },
+    { "src": "assets/icon-dark.png", "size": "512x512", "theme": "dark" }
+  ]
+}

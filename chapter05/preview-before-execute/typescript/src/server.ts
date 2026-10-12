@@ -1,8 +1,9 @@
 // Find-and-replace as a logical operation, with preview-before-execute in
 // both of the chapter's variants: a dry_run parameter on the combined tool,
-// and a separate preview tool whose token gates execution. Failure results
-// are ordinary text that states what did not happen and what to do instead —
-// positive instructions the model can act on.
+// and a separate preview tool whose token gates execution. Failures are
+// isError results whose text states what did not happen and what to do
+// instead — positive instructions the model can act on, and a flag a program
+// can check without parsing English.
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -21,6 +22,7 @@ serveStdio(() => {
   const server = new McpServer({ name: 'preview-before-execute', version: '0.1.0' });
 
   const text = (value: string) => ({ content: [{ type: 'text' as const, text: value }] });
+  const errorText = (value: string) => ({ content: [{ type: 'text' as const, text: value }], isError: true });
 
   // --- Variant 1: one tool with a dry_run parameter ---------------------------
 
@@ -30,7 +32,8 @@ serveStdio(() => {
       description:
         "Replaces every occurrence of 'find' with 'replace' across all documents, applied as one atomic edit batch. " +
         'This is a write operation that modifies documents. ' +
-        'Set dry_run to true to see exactly which lines would change and which internal operations would run, without changing anything.',
+        'Set dry_run to true to see which lines would change and which internal operations would run, without changing anything. ' +
+        'A dry run is advisory: a later call with dry_run false recomputes the changes against the documents as they are then.',
       inputSchema: z.object({
         find: z.string().describe('Exact text to search for (case-sensitive).'),
         replace: z.string().describe('Text to replace each occurrence with.'),
@@ -42,7 +45,7 @@ serveStdio(() => {
     },
     async ({ find, replace, dry_run }) => {
       if (find.length === 0) {
-        return text("No changes were made: 'find' must be non-empty. Provide the exact text to search for.");
+        return errorText("No changes were made: 'find' must be non-empty. Provide the exact text to search for.");
       }
 
       const plan = buildPlan(documents, find, replace);
@@ -57,13 +60,15 @@ serveStdio(() => {
         return text(
           'Dry run — no changes were made.\n\n' +
             renderPreview(plan) +
-            '\nTo apply exactly these changes, call find_and_replace again with the same find and replace and dry_run: false.',
+            '\nTo apply these changes, call find_and_replace again with the same find and replace and dry_run: false. ' +
+            'That call recomputes the changes, so if the documents change in the meantime it applies whatever matches then; ' +
+            'use preview_find_and_replace instead to bind execution to this exact plan.',
         );
       }
 
       const staleDocument = documents.tryApply(plan);
       if (staleDocument !== null) {
-        return text(
+        return errorText(
           `No changes were made: document "${staleDocument}" changed while the operation was being prepared. Retry the call.`,
         );
       }
@@ -87,7 +92,7 @@ serveStdio(() => {
     },
     async ({ find, replace }) => {
       if (find.length === 0) {
-        return text("No preview was created: 'find' must be non-empty. Provide the exact text to search for.");
+        return errorText("No preview was created: 'find' must be non-empty. Provide the exact text to search for.");
       }
 
       const plan = buildPlan(documents, find, replace);
@@ -126,7 +131,7 @@ serveStdio(() => {
     },
     async ({ preview_token }) => {
       if (preview_token === undefined || preview_token.trim() === '') {
-        return text(
+        return errorText(
           'No changes were made. execute_find_and_replace applies a previously previewed plan and needs its preview_token. ' +
             'Call preview_find_and_replace with your find and replace text first — it shows exactly what will change and returns the token to pass here.',
         );
@@ -134,13 +139,13 @@ serveStdio(() => {
 
       const outcome = previews.redeem(preview_token);
       if (outcome.result === 'not_found') {
-        return text(
+        return errorText(
           `No changes were made. Preview token "${preview_token}" was not found — tokens are single-use and expire after ` +
             `${ttlMinutes} minutes. Call preview_find_and_replace to create a fresh preview and token.`,
         );
       }
       if (outcome.result === 'expired') {
-        return text(
+        return errorText(
           `No changes were made. Preview "${preview_token}" has expired (previews are valid for ` +
             `${ttlMinutes} minutes). Call preview_find_and_replace again to re-review the changes and get a fresh token.`,
         );
@@ -148,7 +153,7 @@ serveStdio(() => {
 
       const staleDocument = documents.tryApply(outcome.plan);
       if (staleDocument !== null) {
-        return text(
+        return errorText(
           `No changes were made. Document "${staleDocument}" was modified after preview "${preview_token}" was created, ` +
             'so the previewed plan no longer matches the current content. ' +
             'Call preview_find_and_replace again to review the changes against the current documents.',
@@ -180,11 +185,9 @@ serveStdio(() => {
     },
     async ({ document_id }) => {
       const doc = documents.get(document_id);
-      return text(
-        doc === undefined
-          ? `Document "${document_id}" was not found. Call list_documents to see the available ids.`
-          : doc.lines.join('\n'),
-      );
+      return doc === undefined
+        ? errorText(`Document "${document_id}" was not found. Call list_documents to see the available ids.`)
+        : text(doc.lines.join('\n'));
     },
   );
 

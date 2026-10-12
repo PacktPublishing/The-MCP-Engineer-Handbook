@@ -1,13 +1,13 @@
+using System.Collections.Immutable;
+
 /// <summary>
-/// A document in the store. Version is bumped on every write; previews record
-/// the version they were computed against so a stale preview is detectable.
+/// An immutable snapshot of one document version. A write never changes a
+/// Document; it replaces it in the store with a new one whose Version is one
+/// higher. Lines and Version therefore always describe the same content, and
+/// a preview records the Version it was computed against so a stale preview
+/// is detectable.
 /// </summary>
-public sealed class Document
-{
-    public required string Id { get; init; }
-    public required string[] Lines { get; init; }
-    public int Version { get; set; } = 1;
-}
+public sealed record Document(string Id, int Version, ImmutableArray<string> Lines);
 
 /// <summary>
 /// In-memory stand-in for the document service this MCP server wraps.
@@ -22,6 +22,11 @@ public sealed class DocumentStore
         _documents = Seed().ToDictionary(d => d.Id);
     }
 
+    /// <summary>
+    /// A consistent snapshot of every document, taken under the lock. The
+    /// snapshot stays valid after the lock is released because documents are
+    /// immutable — later writes replace them rather than editing them.
+    /// </summary>
     public IReadOnlyList<Document> All()
     {
         lock (_gate)
@@ -57,9 +62,10 @@ public sealed class DocumentStore
             foreach (var edit in plan.Documents)
             {
                 var doc = _documents[edit.DocumentId];
+                var lines = doc.Lines.ToBuilder();
                 foreach (var line in edit.Lines)
-                    doc.Lines[line.LineNumber - 1] = line.After;
-                doc.Version++;
+                    lines[line.LineNumber - 1] = line.After;
+                _documents[edit.DocumentId] = doc with { Version = doc.Version + 1, Lines = lines.ToImmutable() };
             }
 
             return null;
@@ -68,59 +74,39 @@ public sealed class DocumentStore
 
     private static IEnumerable<Document> Seed() =>
     [
-        new()
-        {
-            Id = "onboarding-guide",
-            Lines =
-            [
-                "Welcome to the team! This guide covers your first week.",
-                "Your first task is to install the Aurora CLI and sign in.",
-                "Aurora sign-in issues go to the platform team.",
-                "All services deploy through the standard pipeline to staging first.",
-                "Your onboarding buddy will schedule a walkthrough on day two.",
-            ],
-        },
-        new()
-        {
-            Id = "release-checklist",
-            Lines =
-            [
-                "1. Confirm the changelog is complete and reviewed.",
-                "2. Run the full Aurora test suite against staging.",
-                "3. Tag the release and update the Aurora version manifest.",
-                "4. Announce the release in #announcements.",
-            ],
-        },
-        new()
-        {
-            Id = "support-runbook",
-            Lines =
-            [
-                "Check the status page before triaging any report.",
-                "Auth incidents: restart the token service first.",
-                "Aurora ingestion lag above 5 minutes pages the on-call engineer.",
-                "Escalate unresolved incidents after 30 minutes.",
-            ],
-        },
-        new()
-        {
-            Id = "style-guide",
-            Lines =
-            [
-                "Write short sentences in the active voice.",
-                "Prefer numbered steps for procedures.",
-                "Screenshots must include alt text.",
-            ],
-        },
-        new()
-        {
-            Id = "team-charter",
-            Lines =
-            [
-                "We ship small changes frequently.",
-                "Every change is reviewed by at least one other engineer.",
-                "Documentation updates ship with the change, not after.",
-            ],
-        },
+        new("onboarding-guide", 1,
+        [
+            "Welcome to the team! This guide covers your first week.",
+            "Your first task is to install the Aurora CLI and sign in.",
+            "Aurora sign-in issues go to the platform team.",
+            "All services deploy through the standard pipeline to staging first.",
+            "Your onboarding buddy will schedule a walkthrough on day two.",
+        ]),
+        new("release-checklist", 1,
+        [
+            "1. Confirm the changelog is complete and reviewed.",
+            "2. Run the full Aurora test suite against staging.",
+            "3. Tag the release and update the Aurora version manifest.",
+            "4. Announce the release in #announcements.",
+        ]),
+        new("support-runbook", 1,
+        [
+            "Check the status page before triaging any report.",
+            "Auth incidents: restart the token service first.",
+            "Aurora ingestion lag above 5 minutes pages the on-call engineer.",
+            "Escalate unresolved incidents after 30 minutes.",
+        ]),
+        new("style-guide", 1,
+        [
+            "Write short sentences in the active voice.",
+            "Prefer numbered steps for procedures.",
+            "Screenshots must include alt text.",
+        ]),
+        new("team-charter", 1,
+        [
+            "We ship small changes frequently.",
+            "Every change is reviewed by at least one other engineer.",
+            "Documentation updates ship with the change, not after.",
+        ]),
     ];
 }

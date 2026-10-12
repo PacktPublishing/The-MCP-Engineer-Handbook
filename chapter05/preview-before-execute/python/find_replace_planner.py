@@ -1,6 +1,7 @@
 """Computes a find-and-replace plan and renders it for the model. The plan is
-the single source of truth for both the preview text and the execution, so
-what was previewed is exactly what runs."""
+the single source of truth for both the preview text and the execution: a
+stored plan (the preview-token variant) runs exactly as previewed, or not at
+all if a document changed in between."""
 
 from __future__ import annotations
 
@@ -42,6 +43,8 @@ class FindReplacePlan:
 
 
 def build(store: DocumentStore, find: str, replace: str) -> FindReplacePlan:
+    # One snapshot: each edit's lines and version come from the same immutable
+    # document, so a plan never pairs old text with a new version.
     document_edits: list[DocumentEdit] = []
     for doc in store.all():
         line_edits = [

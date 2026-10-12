@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod';
-import { handlers, ApiError } from './api.js';
+import { handlers, ApiError, ACTING_USER } from './api.js';
 
 // --- Endpoint manifest (generated data — see ../agent-instructions.md) ---
 
@@ -42,6 +42,20 @@ const manifest: Manifest = JSON.parse(
 
 const groupNames = manifest.groups.map((g) => g.name);
 
+// A path parameter fills exactly one template segment. Reject values that
+// decode to anything else — "%2F", "..", malformed escapes — so a filled-in
+// path can never reach outside the endpoint it matched. Harmless against this
+// in-memory simulation; essential once a handler forwards to a real HTTP API.
+function decodePathParam(segment: string): string | undefined {
+  let value: string;
+  try {
+    value = decodeURIComponent(segment);
+  } catch {
+    return undefined;
+  }
+  return value === '.' || value === '..' || /[/\\]/.test(value) ? undefined : value;
+}
+
 // Match a path (either the "{id}" template itself or a concrete path like
 // "/api/documents/doc-001/permissions") against the manifest. Literal
 // segments beat placeholders, so "/api/documents/search" is not swallowed
@@ -62,7 +76,12 @@ function matchEndpoint(
     for (let i = 0; i < segments.length; i++) {
       const t = templateSegments[i];
       if (t.startsWith('{') && t.endsWith('}')) {
-        params[t.slice(1, -1)] = decodeURIComponent(segments[i]);
+        const value = decodePathParam(segments[i]);
+        if (value === undefined) {
+          matched = false;
+          break;
+        }
+        params[t.slice(1, -1)] = value;
       } else if (t === segments[i]) {
         literals++;
       } else {
@@ -298,6 +317,15 @@ serveStdio(() => {
           );
         }
       }
+
+      // The authorization boundary. Approving execute_endpoint is not approval
+      // of every operation the manifest can expose: a real deployment checks
+      // the concrete operation against a server-side allowlist and the
+      // caller's permissions here, and audits it by that name. The simulation
+      // has no authentication, so it only writes the audit line.
+      console.error(
+        `[audit] ${ACTING_USER} ${match.endpoint.method} ${match.endpoint.path} ${JSON.stringify(match.params)}`,
+      );
 
       const handler = handlers[`${match.endpoint.method} ${match.endpoint.path}`];
       try {

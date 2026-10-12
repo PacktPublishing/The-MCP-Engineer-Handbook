@@ -14,14 +14,8 @@ import time
 from mcp.server import Server
 from mcp.server.context import CallNext, ServerRequestContext
 from mcp.server.stdio import stdio_server
-from mcp_types import (
-    CallToolRequestParams,
-    CallToolResult,
-    ListToolsResult,
-    PaginatedRequestParams,
-    TextContent,
-    Tool,
-)
+
+from server import handle_call_tool, handle_list_tools
 
 logger = logging.getLogger("middleware_example")
 
@@ -36,40 +30,6 @@ class TimingMiddleware:
         finally:
             elapsed = time.perf_counter() - start
             logger.info("%s handled in %.3fs", ctx.method, elapsed)
-
-
-async def handle_list_tools(
-    ctx: ServerRequestContext, params: PaginatedRequestParams | None
-) -> ListToolsResult:
-    return ListToolsResult(
-        tools=[
-            Tool(
-                name="echo",
-                description="Echo back the provided message",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "The message to echo back",
-                        },
-                    },
-                    "required": ["message"],
-                },
-            ),
-        ]
-    )
-
-
-async def handle_call_tool(
-    ctx: ServerRequestContext, params: CallToolRequestParams
-) -> CallToolResult:
-    arguments = params.arguments or {}
-    if params.name == "echo":
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Echo: {arguments['message']}")]
-        )
-    raise ValueError(f"Unknown tool: {params.name}")
 
 
 server = Server(

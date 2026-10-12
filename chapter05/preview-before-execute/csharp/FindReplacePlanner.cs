@@ -12,13 +12,16 @@ public sealed record FindReplacePlan(string Find, string Replace, IReadOnlyList<
 
 /// <summary>
 /// Computes a find-and-replace plan and renders it for the model. The plan is
-/// the single source of truth for both the preview text and the execution, so
-/// what was previewed is exactly what runs.
+/// the single source of truth for both the preview text and the execution:
+/// a stored plan (the preview-token variant) runs exactly as previewed, or not
+/// at all if a document changed in between.
 /// </summary>
 public static class FindReplacePlanner
 {
     public static FindReplacePlan Build(DocumentStore store, string find, string replace)
     {
+        // One snapshot: each edit's lines and version come from the same
+        // immutable document, so a plan never pairs old text with a new version.
         var documentEdits = new List<DocumentEdit>();
         foreach (var doc in store.All())
         {

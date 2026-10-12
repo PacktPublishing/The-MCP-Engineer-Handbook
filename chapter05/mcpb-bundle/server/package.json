@@ -1,0 +1,13 @@
+{
+  "name": "weather-alerts-server",
+  "version": "1.0.0",
+  "description": "Chapter 5 MCPB fixture: the server inside the weather-alerts bundle",
+  "main": "index.js",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "zod": "^4.2.0"
+  }
+}

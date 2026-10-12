@@ -201,6 +201,15 @@ public sealed class EndpointTools
             }
         }
 
+        // The authorization boundary. Approving execute_endpoint is not approval
+        // of every operation the manifest can expose: a real deployment checks
+        // the concrete operation against a server-side allowlist and the
+        // caller's permissions here, and audits it by that name. The simulation
+        // has no authentication, so it only writes the audit line.
+        Console.Error.WriteLine(
+            $"[audit] {SimulatedApi.ActingUser} {match.Value.Endpoint.Method} {match.Value.Endpoint.Path} " +
+            JsonSerializer.Serialize(match.Value.Params));
+
         var handler = SimulatedApi.Handlers[$"{match.Value.Endpoint.Method} {match.Value.Endpoint.Path}"];
         try
         {
