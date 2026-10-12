@@ -42,6 +42,7 @@ templates/hello-server/   walking skeleton in all three languages (toolchain che
 | `chapter05/completions/` | §5.3.3 | Python (canonical), TS, C# |
 | `chapter05/low-level-handlers/` | §5.4.1/§5.4.3 | TS + Python (canonical), C# |
 | `chapter05/csharp-filters/` | §5.4.2 | C# only (by design) |
+| `chapter05/mcpb-bundle/` | §5.5.1/§5.5.2 | Node (bundle fixture) |
 | `chapter06/schema-mapping/` | §6.2.2/§6.2.3 | TS (canonical), C#, Python |
 | `chapter06/mrtr-client/` | §6.2.5 | TS (canonical), C#, Python |
 | `chapter06/task-injection/` | §6.2.11 | C# (canonical), Python, TS |
