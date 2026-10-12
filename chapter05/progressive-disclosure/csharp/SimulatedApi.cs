@@ -34,7 +34,7 @@ public sealed class ApiQuery
 public static class SimulatedApi
 {
     // The simulation has no authentication; all calls act as this user.
-    private const string ActingUser = "user-001";
+    public const string ActingUser = "user-001";
 
     private sealed class User
     {

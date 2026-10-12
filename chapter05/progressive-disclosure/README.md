@@ -55,8 +55,59 @@ Pipe these into the running process (one per line), on any of the three:
 {"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"execute_endpoint","arguments":{"method":"GET","path":"/api/documents/doc-001/permissions"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}
 ```
 
+## Example: who has write access to a document?
+
 The chapter's example interaction (finding who has write access to the
-Quarterly Report Q1 2026) reproduces against the seed data: search the
-document via `execute_endpoint` on `GET /api/documents/search` with
-`q=Quarterly Report Q1 2026`, then fetch `GET
-/api/documents/doc-001/permissions`.
+Quarterly Report Q1 2026) reproduces against the seed data, but the
+permissions call alone does not answer it: grants name *principals*, and
+some of those are groups. The full composition is:
+
+1. Find the document: `GET /api/documents/search` with
+   `q=Quarterly Report Q1 2026` → `doc-001`.
+2. List its grants: `GET /api/documents/doc-001/permissions` → Alice Chen
+   (user, `admin`), Finance (group `grp-002`, `read`), Leadership (group
+   `grp-001`, `write`).
+3. Expand each group grant at `write` or above: `GET
+   /api/groups/grp-001/members` → Alice Chen, Bob Martinez. (Finance only has
+   `read`, so its members — Carol Okafor, Dana Kim — do not qualify.)
+4. Combine with the direct user grants, keep each user's highest level, and
+   deduplicate: **Alice Chen (`admin`: direct, and `write` via Leadership)
+   and Bob Martinez (`write` via Leadership).**
+5. Check the answer: `GET /api/documents/doc-001/permissions/check` with
+   `userId=user-002` (and so on for each user) returns the server's own
+   effective level and the grants it came from. A composed answer is a claim
+   about the API's semantics; checking it against the authoritative endpoint
+   is cheap.
+
+Access semantics of the simulation: levels are ordered `read` < `write` <
+`admin`, and a higher level includes the lower ones; a user's effective level
+is the highest of their direct grant and the grants to groups they belong to;
+groups are flat; creating a document grants its creator `admin`. It does not
+model nested groups, deny entries, folder or workspace inheritance, sharing
+links, or org-wide roles — a production ACL usually has some of these, which
+is exactly why step 5 belongs in the workflow.
+
+## Authorization boundary
+
+`execute_endpoint` only runs operations listed in the manifest: the method
+and path must match a manifest entry (no arbitrary URLs or methods), and a
+path parameter must decode to a single segment — `%2F`, `..`, and malformed
+escapes are rejected, so a filled-in path cannot reach outside the template it
+matched.
+
+That is necessary but not sufficient. Approving the generic `execute_endpoint`
+tool is not approval of every operation the manifest exposes today, or of the
+ones a regenerated manifest adds tomorrow — and a host cannot infer an
+operation's side effects from one generic tool's annotations. In a real
+deployment, check the concrete operation (method + path template) against a
+server-side allowlist and the caller's permissions before running it, and bind
+approval and audit records to that operation rather than to
+`execute_endpoint`. All three ports mark this point in `execute_endpoint`; the
+simulation has no authentication, so it only writes an audit line to stderr:
+
+```
+[audit] user-001 GET /api/documents/{id}/permissions {"id":"doc-001"}
+```
+
+Treat a manifest change that adds operations as a capability change that
+needs the same review as adding tools.

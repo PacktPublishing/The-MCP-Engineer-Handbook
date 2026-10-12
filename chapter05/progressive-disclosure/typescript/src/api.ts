@@ -6,7 +6,7 @@
 export class ApiError extends Error {}
 
 // The simulation has no authentication; all calls act as this user.
-const ACTING_USER = 'user-001';
+export const ACTING_USER = 'user-001';
 
 interface User {
   id: string;

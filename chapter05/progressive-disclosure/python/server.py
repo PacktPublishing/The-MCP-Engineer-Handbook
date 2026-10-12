@@ -7,6 +7,8 @@
 
 import json
 import math
+import re
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
@@ -22,6 +24,20 @@ MANIFEST_PATH = Path(__file__).resolve().parent.parent / "data" / "endpoints.jso
 manifest: dict[str, Any] = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
 group_names = [g["name"] for g in manifest["groups"]]
+
+
+def decode_path_param(segment: str) -> str | None:
+    """A path parameter fills exactly one template segment. Reject values that
+    decode to anything else — "%2F", "..", malformed escapes — so a filled-in
+    path can never reach outside the endpoint it matched. Harmless against this
+    in-memory simulation; essential once a handler forwards to a real HTTP API."""
+    if re.search(r"%(?![0-9A-Fa-f]{2})", segment):
+        return None
+    try:
+        value = unquote(segment, errors="strict")
+    except UnicodeDecodeError:
+        return None
+    return None if value in (".", "..") or "/" in value or "\\" in value else value
 
 
 def match_endpoint(method: str, path: str) -> tuple[dict[str, Any], dict[str, str]] | None:
@@ -42,7 +58,11 @@ def match_endpoint(method: str, path: str) -> tuple[dict[str, Any], dict[str, st
         matched = True
         for t, s in zip(template_segments, segments):
             if t.startswith("{") and t.endswith("}"):
-                params[t[1:-1]] = unquote(s)
+                value = decode_path_param(s)
+                if value is None:
+                    matched = False
+                    break
+                params[t[1:-1]] = value
             elif t == s:
                 literals += 1
             else:
@@ -864,6 +884,14 @@ def execute_endpoint(
                 "Pass the request body as a JSON string; use describe_endpoint with "
                 f"{m} {endpoint['path']} to see the request schema."
             )
+
+    # The authorization boundary. Approving execute_endpoint is not approval
+    # of every operation the manifest can expose: a real deployment checks
+    # the concrete operation against a server-side allowlist and the
+    # caller's permissions here, and audits it by that name. The simulation
+    # has no authentication, so it only writes the audit line.
+    params_json = json.dumps(path_params, separators=(",", ":"))
+    print(f"[audit] {ACTING_USER} {endpoint['method']} {endpoint['path']} {params_json}", file=sys.stderr)
 
     fn = handlers[f"{endpoint['method']} {endpoint['path']}"]
     try:
