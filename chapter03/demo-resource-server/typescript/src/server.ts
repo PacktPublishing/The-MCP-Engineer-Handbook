@@ -163,6 +163,9 @@ serveStdio(() => {
     async (uri, variables) => {
       // retrieve user preferences from your data source of choice
       const id = Number(variables.id);
+      // Variables arrive as strings: reject a non-integer {id} here, as the C# and
+      // Python SDKs do while binding their typed parameter.
+      if (!Number.isInteger(id)) throw new Error(`Invalid user id: '${variables.id}'`);
       return {
         contents: [
           {
@@ -176,20 +179,19 @@ serveStdio(() => {
   );
 
   // An RFC 6570 LEVEL-4 template (explode modifier on a query expansion). Kept as a
-  // record of what the TS SDK does with it — see the sample README for the verdict.
+  // record of what the TS SDK does with it; the result echoes the bindings as JSON
+  // (variables arrive as strings, or a string array) — see the README for the matrix.
   server.registerResource(
     'doc_search',
     new ResourceTemplate('docs://search{?tags*,limit}', { list: undefined }),
     { description: 'Searches the documentation catalog by tag.' },
     async (uri, variables) => {
-      const tags = variables.tags;
-      const tagText =
-        tags === undefined ? '(none)' : Array.isArray(tags) ? tags.join(',') : String(tags);
-      const limit = variables.limit === undefined ? 'default' : String(variables.limit);
+      const bound = (value: unknown) => JSON.stringify(value ?? null);
       return textResource(
         uri.href,
         'text/plain',
-        `Search results for tags [${tagText}] (limit ${limit}): user_guide.md, release_notes.md`,
+        `Search results (bound tags=${bound(variables.tags)}, limit=${bound(variables.limit)}): ` +
+          'user_guide.md, release_notes.md',
       );
     },
   );

@@ -4,6 +4,8 @@
 # a tool that returns a resource link instead of content (§3.3.2), and a handful of
 # deliberately awkward resources (oversized, binary, broken, chained links) that the
 # resource-link-client sample uses to exercise its hardened link resolution (§3.3.4).
+import json
+
 from mcp.server import MCPServer
 from mcp_types import ResourceLink
 
@@ -202,13 +204,13 @@ def user_preferences(id: int) -> str:
 # modifier at registration time (InvalidUriTemplate: "Explode modifier on
 # {?tags*} is not supported for matching"), so this port registers the level-3
 # form without the modifier — single-valued ?tags=...&limit=... reads route and
-# bind fine. See the sample README for the full verdict per SDK.
+# bind fine. The result echoes the bindings as JSON; see the sample README for the
+# observed matrix per SDK.
 @server.resource("docs://search{?tags,limit}", name="doc_search",
                  description="Searches the documentation catalog by tag.")
 def search_docs(tags: str | None = None, limit: int | None = None) -> str:
     return (
-        f"Search results for tags [{tags or '(none)'}] "
-        f"(limit {limit if limit is not None else 'default'}): "
+        f"Search results (bound tags={json.dumps(tags)}, limit={json.dumps(limit)}): "
         "user_guide.md, release_notes.md"
     )
 
