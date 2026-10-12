@@ -13,6 +13,7 @@ builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithTools<DocsTools>();
+    .WithTools<DocsTools>()
+    .WithRequestFilters(ToolOrder.ListInDeclarationOrder<DocsTools>);
 
 await builder.Build().RunAsync();

@@ -16,7 +16,8 @@ today; push is a research preview, not a standard.
   A real channel server bridges Telegram/Discord/Slack/email the same way — the tool
   surface is the pattern, the backend is a detail. The unread-cursor lives in process
   memory: a channel is a stdio server, and the process *is* the stream position (ch10's
-  stdio-affinity point).
+  stdio-affinity point). A `tools/list` filter restores declaration order: the C# SDK
+  2.0.0 lists tools in hash order (stable, but `reply` before `check_messages`).
 - `csharp/Chat/` — the user's "phone": a console app that appends to the inbox file and
   tails the outbox. Knows nothing about MCP.
 - `csharp/ChannelHost/` — a minimal harness: owns the loop (poll every 2s, one model turn
