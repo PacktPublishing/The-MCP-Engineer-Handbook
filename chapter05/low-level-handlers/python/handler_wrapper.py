@@ -1,7 +1,8 @@
 """Cross-cutting concerns via manual handler wrapping (decorator composition).
 
-Same tools as server.py, but the tools/call handler is wrapped in logging,
-rate-limiting, and error-handling decorators before it is registered.
+Reuses server.py's handlers (tools, schemas, and argument validation), but the
+tools/call handler is wrapped in logging, rate-limiting, and error-handling
+decorators before it is registered.
 Log output goes to stderr; stdout belongs to the protocol.
 """
 
@@ -10,17 +11,13 @@ import functools
 import logging
 import time
 
+from mcp import MCPError
 from mcp.server import Server
 from mcp.server.context import ServerRequestContext
 from mcp.server.stdio import stdio_server
-from mcp_types import (
-    CallToolRequestParams,
-    CallToolResult,
-    ListToolsResult,
-    PaginatedRequestParams,
-    TextContent,
-    Tool,
-)
+from mcp_types import CallToolRequestParams, CallToolResult, TextContent
+
+from server import handle_call_tool, handle_list_tools
 
 logger = logging.getLogger("handler_wrapper")
 
@@ -63,60 +60,33 @@ def with_rate_limit(max_calls: int = 10, window_seconds: int = 60):
 
 
 def with_error_handling(handler):
-    """Convert handler exceptions into is_error tool results."""
+    """Convert unexpected handler exceptions into is_error tool results.
+
+    MCPError is a deliberate protocol error (such as an unknown tool), so it
+    passes through. Anything else is logged in full here, and the client only
+    sees a generic message: exception text can carry internal details.
+    """
 
     @functools.wraps(handler)
     async def wrapped(ctx: ServerRequestContext, params: CallToolRequestParams):
         try:
             return await handler(ctx, params)
-        except Exception as exc:
+        except MCPError:
+            raise
+        except Exception:
             logger.exception("Tool %s failed", params.name)
             return CallToolResult(
-                content=[TextContent(type="text", text=f"Error: {exc}")],
+                content=[TextContent(type="text", text=f"Tool {params.name} failed.")],
                 is_error=True,
             )
 
     return wrapped
 
 
-async def handle_list_tools(
-    ctx: ServerRequestContext, params: PaginatedRequestParams | None
-) -> ListToolsResult:
-    return ListToolsResult(
-        tools=[
-            Tool(
-                name="echo",
-                description="Echo back the provided message",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "message": {
-                            "type": "string",
-                            "description": "The message to echo back",
-                        },
-                    },
-                    "required": ["message"],
-                },
-            ),
-        ]
-    )
-
-
-async def _handle_call_tool_impl(
-    ctx: ServerRequestContext, params: CallToolRequestParams
-) -> CallToolResult:
-    arguments = params.arguments or {}
-    if params.name == "echo":
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"Echo: {arguments['message']}")]
-        )
-    raise ValueError(f"Unknown tool: {params.name}")
-
-
 # Compose the decorators (outermost runs first)
 _decorated = with_logging(
     with_rate_limit(max_calls=10, window_seconds=60)(
-        with_error_handling(_handle_call_tool_impl)
+        with_error_handling(handle_call_tool)
     )
 )
 
