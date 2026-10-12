@@ -23,7 +23,10 @@ builder.Services
     .WithTools<DocumentTools>()
     .WithRequestFilters(filters =>
     {
-        // Logging filter — logs all tool calls with timing
+        // Logging filter — logs all tool calls with timing. It observes
+        // exceptions and rethrows them: the SDK passes MRTR input requests,
+        // cancellation, and protocol errors through, and turns any other
+        // failure into an isError result without leaking its message.
         filters.AddCallToolFilter((next) => async (request, cancellationToken) =>
         {
             var toolName = request.MatchedPrimitive?.Id ?? "unknown";
@@ -31,21 +34,27 @@ builder.Services
             try
             {
                 var result = await next(request, cancellationToken);
-                sw.Stop();
                 logger.LogInformation("Tool {Name} completed in {Elapsed}ms",
                     toolName, sw.ElapsedMilliseconds);
                 return result;
             }
+            catch (InputRequiredException)
+            {
+                logger.LogInformation("Tool {Name} requested input after {Elapsed}ms",
+                    toolName, sw.ElapsedMilliseconds);
+                throw;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                logger.LogInformation("Tool {Name} cancelled after {Elapsed}ms",
+                    toolName, sw.ElapsedMilliseconds);
+                throw;
+            }
             catch (Exception ex)
             {
-                sw.Stop();
                 logger.LogError(ex, "Tool {Name} failed after {Elapsed}ms",
                     toolName, sw.ElapsedMilliseconds);
-                return new CallToolResult
-                {
-                    Content = [new TextContentBlock { Text = $"Error: {ex.Message}" }],
-                    IsError = true,
-                };
+                throw;
             }
         });
 

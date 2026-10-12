@@ -1,5 +1,8 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Text.Json;
+using ModelContextProtocol;
+using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
 [McpServerToolType]
@@ -20,13 +23,48 @@ public class DocumentTools
     public static string GetDocument([Description("Document ID.")] string id)
         => Documents.TryGetValue(id, out var content)
             ? content
-            : throw new KeyNotFoundException($"No document with ID '{id}'.");
+            : throw new McpException($"No document with ID '{id}'.");
 
-    [McpServerTool(Name = "create_document"), Description("Creates or replaces a document.")]
+    // Replacing an existing document asks the user first, via an MRTR form
+    // elicitation (Section 5.3.1). The InputRequiredException has to pass
+    // through every filter in Program.cs untouched for the request to reach
+    // the client.
+    [McpServerTool(Name = "create_document"), Description("Creates a document, or replaces one after the user confirms.")]
     public static string CreateDocument(
+        RequestContext<CallToolRequestParams> context,
         [Description("Document ID.")] string id,
         [Description("Document content.")] string content)
     {
+        if (Documents.ContainsKey(id))
+        {
+            if (context.Params?.InputResponses?.TryGetValue("confirm_overwrite", out var response) is not true)
+            {
+                throw new InputRequiredException(new Dictionary<string, InputRequest>
+                {
+                    ["confirm_overwrite"] = InputRequest.ForElicitation(new ElicitRequestParams
+                    {
+                        Message = $"Document '{id}' already exists. Replace it?",
+                        RequestedSchema = new ElicitRequestParams.RequestSchema
+                        {
+                            Properties = new Dictionary<string, ElicitRequestParams.PrimitiveSchemaDefinition>
+                            {
+                                ["replace"] = new ElicitRequestParams.BooleanSchema { Title = "Replace" },
+                            },
+                            Required = ["replace"],
+                        },
+                    }),
+                });
+            }
+
+            var answer = response.Deserialize(InputResponse.ElicitResultJsonTypeInfo);
+            if (answer is not { IsAccepted: true, Content: { } fields }
+                || !fields.TryGetValue("replace", out var replace)
+                || replace.ValueKind != JsonValueKind.True)
+            {
+                return $"Kept the existing document '{id}'.";
+            }
+        }
+
         Documents[id] = content;
         return $"Stored document '{id}' ({content.Length} chars).";
     }
@@ -36,5 +74,5 @@ public class DocumentTools
     public static string AdminDeleteDocument([Description("Document ID.")] string id)
         => Documents.TryRemove(id, out _)
             ? $"Deleted document '{id}'."
-            : throw new KeyNotFoundException($"No document with ID '{id}'.");
+            : throw new McpException($"No document with ID '{id}'.");
 }
