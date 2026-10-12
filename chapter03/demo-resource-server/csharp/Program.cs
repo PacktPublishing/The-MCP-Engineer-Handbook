@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 
@@ -23,9 +24,49 @@ builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithTools<DemoTools>()
-    .WithResources<DemoResources>();
+    .WithResources<DemoResources>()
+    // The SDK keeps registered primitives in a hash-keyed dictionary, so its lists come
+    // back in a different order on every run. Restore declaration order (the order the
+    // Python and TypeScript ports list them in) so clients see a stable catalog.
+    .WithRequestFilters(filters =>
+    {
+        var resourceOrder = DeclarationOrder<DemoResources, McpServerResourceAttribute>(
+            (attribute, _) => attribute.UriTemplate!);
+        var toolOrder = DeclarationOrder<DemoTools, McpServerToolAttribute>(
+            (attribute, method) => attribute.Name ?? JsonNamingPolicy.SnakeCaseLower.ConvertName(method.Name));
+
+        filters.AddListResourcesFilter(next => async (request, cancellationToken) =>
+        {
+            var result = await next(request, cancellationToken);
+            result.Resources = [.. result.Resources.OrderBy(r => resourceOrder.GetValueOrDefault(r.Uri, int.MaxValue))];
+            return result;
+        });
+        filters.AddListResourceTemplatesFilter(next => async (request, cancellationToken) =>
+        {
+            var result = await next(request, cancellationToken);
+            result.ResourceTemplates = [.. result.ResourceTemplates.OrderBy(t => resourceOrder.GetValueOrDefault(t.UriTemplate, int.MaxValue))];
+            return result;
+        });
+        filters.AddListToolsFilter(next => async (request, cancellationToken) =>
+        {
+            var result = await next(request, cancellationToken);
+            result.Tools = [.. result.Tools.OrderBy(t => toolOrder.GetValueOrDefault(t.Name, int.MaxValue))];
+            return result;
+        });
+    });
 
 await builder.Build().RunAsync();
+
+// Maps each attributed method's key to its position in the source file. Metadata tokens
+// follow declaration order, unlike GetMethods(), whose order is unspecified.
+static Dictionary<string, int> DeclarationOrder<TType, TAttribute>(Func<TAttribute, MethodInfo, string> key)
+    where TAttribute : Attribute =>
+    typeof(TType)
+        .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
+        .Where(method => method.GetCustomAttribute<TAttribute>() is not null)
+        .OrderBy(method => method.MetadataToken)
+        .Select((method, index) => (Key: key(method.GetCustomAttribute<TAttribute>()!, method), index))
+        .ToDictionary(entry => entry.Key, entry => entry.index);
 
 [McpServerToolType]
 public class DemoTools
