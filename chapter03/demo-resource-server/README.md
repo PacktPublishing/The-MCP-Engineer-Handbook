@@ -14,14 +14,14 @@ What it exposes:
 
 All three ports list tools, resources and templates in declaration order, so every client sees the same stable catalog (and "the first resource" is always `user_guide`). Python and TypeScript do this by default. At 2.0.0 the C# SDK stores registered primitives in a hash-keyed dictionary, so its lists come back in hash order. For tools that order is stable but arbitrary. Resources and templates are keyed with a comparer whose hash .NET randomizes per process, so their order changes on every run. The C# server therefore adds `tools/list`, `resources/list` and `resources/templates/list` filters that sort them back into declaration order.
 
-## URI-template compatibility (pinned 2.0.0 SDKs)
+## URI-template compatibility (pinned SDKs)
 
 Two different things hide behind "supports RFC 6570":
 
 - **Expansion** is what the RFC defines: which URI a template produces for given variable values. That is the client's side of the contract.
 - **Matching and binding** is what a server SDK does with an incoming URI: decide whether it matches a registered template, then turn the URI back into variable values for your handler. RFC 6570 doesn't define this reverse direction, and the SDKs differ.
 
-Don't assume an SDK matches every expansion of every level. The tables below are observed, not inferred. Each row was produced by sending `resources/read` over stdio to servers pinned at **`ModelContextProtocol` 2.0.0** (C#), **`mcp` 2.0.0** (Python), and **`@modelcontextprotocol/server` 2.0.0** (TypeScript).
+Don't assume an SDK matches every expansion of every level. The tables below are observed, not inferred. Each row was produced by sending `resources/read` over stdio to servers pinned at **`ModelContextProtocol` 2.0.0** (C#), **`mcp` 2.0.0** (Python), and **`@modelcontextprotocol/server` 2.2.0** (TypeScript; every TypeScript row was re-run after the move from 2.0.0 and is unchanged).
 
 ### The sample's own templates
 
@@ -85,4 +85,4 @@ M='"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},
 
 **Python:** `cd python && uv sync`. Same catalog — identical URIs, names, MIME types, the declared `size: 64000` on the bundle's `big_dataset` link, and the same 3-hop chain. The Python client samples locate `python/server.py` automatically (override with `DEMO_RESOURCE_SERVER_PY`). The high-level `MCPServer` stdio path serves **both eras** at 2.0.0: the same handshake-less smoke works with `| uv run --project python python/server.py 2>/dev/null` (it answers `server/discover`; an `initialize` opening instead locks the connection to the legacy 2025-11-25 era). One deviation: tools returning `ResourceLink` content need `structured_output=False` on the decorator, or the SDK publishes the ResourceLink model itself as the tool's output schema.
 
-**TypeScript:** `cd typescript && npm ci && npm run build`. Same catalog — identical URIs, names, MIME types, the declared `size: 64000` on the bundle's `big_dataset` link, and the same 3-hop chain. The TS client samples locate `typescript/dist/server.js` automatically (override with `DEMO_RESOURCE_SERVER_JS`). Served with `serveStdio`, so the same handshake-less smoke works with `| node typescript/dist/server.js 2>/dev/null`. `resource_link` blocks in tool results and `ResourceTemplate` registration both work at 2.0.0 unmodified; the one structural deviation is that the template read callback receives `(uri, variables)` with string variables — the `{id}` is parsed with `Number(...)` and rejected unless it is an integer, where C# and Python bind a typed `int id` parameter.
+**TypeScript:** `cd typescript && npm ci && npm run build`. Same catalog — identical URIs, names, MIME types, the declared `size: 64000` on the bundle's `big_dataset` link, and the same 3-hop chain. The TS client samples locate `typescript/dist/server.js` automatically (override with `DEMO_RESOURCE_SERVER_JS`). Served with `serveStdio`, so the same handshake-less smoke works with `| node typescript/dist/server.js 2>/dev/null`. `resource_link` blocks in tool results and `ResourceTemplate` registration both work at 2.2.0 unmodified; the one structural deviation is that the template read callback receives `(uri, variables)` with string variables — the `{id}` is parsed with `Number(...)` and rejected unless it is an integer, where C# and Python bind a typed `int id` parameter.

@@ -29,3 +29,5 @@ curl -s http://localhost:5000 -X POST \
 ```
 
 Expected: a result containing `"text":"Echo: FOO"`, and `echo tool called: message="FOO", uppercase=…` in the server console.
+
+Keep the `MCP-Protocol-Version` header: the Streamable HTTP spec requires it on every POST, and since `@modelcontextprotocol/server` 2.1.0 the TypeScript server answers a modern request without it with `400` and JSON-RPC `-32020` (`HeaderMismatch`).

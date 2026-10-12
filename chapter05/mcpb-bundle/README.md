@@ -69,10 +69,10 @@ that by hand:
 
 ```bash
 npx @anthropic-ai/mcpb@2.1.2 unpack weather-alerts-1.0.0.mcpb /tmp/weather-alerts
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_alerts","arguments":{"city":"Oslo"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}' \
+{ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_alerts","arguments":{"city":"Oslo"},"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke","version":"0"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}'; sleep 1; } \
   | WEATHER_API_KEY=demo CACHE_TTL=300 node /tmp/weather-alerts/server/index.js
 ```
 
-The response carries the Oslo wind warning. Without `WEATHER_API_KEY` the
+The response carries the Oslo wind warning. The `sleep` keeps stdin open until the answer is written: since `@modelcontextprotocol/server` 2.1.0 a stdio server shuts down when stdin closes and drops replies to requests still in flight, as a host's own disconnect would. Without `WEATHER_API_KEY` the
 tool returns an `isError` result asking the user to configure the key, which
 is what a user who skipped the install-time prompt would see.

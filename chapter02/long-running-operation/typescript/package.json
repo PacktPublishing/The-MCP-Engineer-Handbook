@@ -8,7 +8,7 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/server": "2.0.0"
+    "@modelcontextprotocol/server": "2.2.0"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
