@@ -42,6 +42,8 @@ typescript/           minimal counterpart: server + client over InMemoryTranspor
 
 The C# implementation is canonical; the TypeScript project is deliberately tiny — it exists to demonstrate the linked-pair API.
 
+Both C# hosts register `DocsTools` with a `tools/list` filter (`ToolOrder.cs`) that restores declaration order: the C# SDK 2.0.0 lists tools in hash order (stable across runs, but not declaration order), and the tool order is part of what the model sees.
+
 ## Run (C#)
 
 ```bash

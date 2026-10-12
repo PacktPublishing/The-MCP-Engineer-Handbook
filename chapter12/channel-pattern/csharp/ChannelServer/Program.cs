@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
+using System.Reflection;
 using System.Text.Json;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -13,7 +14,25 @@ builder.Logging.AddConsole(o => o.LogToStandardErrorThreshold = LogLevel.Trace);
 builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
-    .WithTools<ChannelTools>();
+    .WithTools<ChannelTools>()
+    // The SDK keeps registered tools in a hash-keyed dictionary, so tools/list comes back
+    // in hash order: stable, but not the order the tools are declared in. Restore
+    // declaration order, so check_messages is listed before reply.
+    .WithRequestFilters(filters =>
+    {
+        var toolOrder = typeof(ChannelTools).GetMethods()
+            .Where(method => method.GetCustomAttribute<McpServerToolAttribute>() is not null)
+            .OrderBy(method => method.MetadataToken) // metadata tokens follow declaration order
+            .Select((method, index) => (Name: method.GetCustomAttribute<McpServerToolAttribute>()!.Name!, index))
+            .ToDictionary(entry => entry.Name, entry => entry.index);
+
+        filters.AddListToolsFilter(next => async (request, cancellationToken) =>
+        {
+            var result = await next(request, cancellationToken);
+            result.Tools = [.. result.Tools.OrderBy(t => toolOrder.GetValueOrDefault(t.Name, int.MaxValue))];
+            return result;
+        });
+    });
 
 await builder.Build().RunAsync();
 

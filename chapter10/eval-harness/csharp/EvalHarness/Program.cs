@@ -32,7 +32,8 @@ builder.Logging.ClearProviders(); // keep the eval report readable
 builder.Services
     .AddMcpServer()
     .WithStreamServerTransport(clientToServer.Reader.AsStream(), serverToClient.Writer.AsStream())
-    .WithTools<DocsTools>();
+    .WithTools<DocsTools>()
+    .WithRequestFilters(ToolOrder.ListInDeclarationOrder<DocsTools>);
 using var server = builder.Build();
 await server.StartAsync();
 

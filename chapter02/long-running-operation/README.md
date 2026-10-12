@@ -25,6 +25,7 @@ var patchedTool = statusTool.WithDescription(
 ## Run
 
 - **C#** (canonical): `cd csharp && dotnet run`
+  The C# server adds a `tools/list` filter that restores declaration order: the C# SDK 2.0.0 lists tools in hash order (stable across runs, but not declaration order), and the filter makes it match the Python and TypeScript ports.
 - **Client demo:** from this directory, `dotnet run --project csharp-client` (it spawns the server itself via `dotnet run --project csharp`; pass a different server project path as the first argument if running from elsewhere)
 - **Python:** `cd python && uv sync && uv run server.py` — same four tools, same handles/guidance texts, state in a dict keyed by the handle, completion derived from the clock (`OPERATION_DELAY_SECONDS`, default 4). The output-schema client demo is not ported: `McpClientTool.WithDescription` is a C#-specific re-presentation API; the Python equivalent of the lift itself is in `chapter06/schema-mapping/python/`.
 - **TypeScript:** `cd typescript && npm ci && npm run build && npm start` — same four tools, same handles/guidance texts, state in a `Map` keyed by the handle, completion derived from the clock (`OPERATION_DELAY_SECONDS`, default 4); `check_operation_status` publishes the same output schema via `registerTool`'s `outputSchema`. The output-schema client demo is not ported: `McpClientTool.WithDescription` is a C#-specific re-presentation API — the TS `Client` returns listed tools as plain data, so the equivalent lift is editing the tool's description string before handing it to the model.
