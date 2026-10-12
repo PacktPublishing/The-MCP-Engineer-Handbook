@@ -6,7 +6,9 @@
 // across ALL connected servers, tagging each entry with a host-assigned server name;
 // the read tool routes a read to the right server by that name. To prove the
 // aggregation, this host spawns the SAME demo server twice under different labels
-// ("docs" and "wiki") — same catalog, distinct routing keys.
+// ("docs" and "wiki") — same catalog, distinct routing keys. The read tool enforces the
+// cross-server origin policy: after reading from "wiki", the scripted model tries a read
+// from "docs", and the host asks the (scripted) user, who declines.
 //
 // Usage: dotnet run
 
@@ -26,7 +28,15 @@ foreach (var serverName in (string[])["docs", "wiki"])
 
 // Wrap the two methods as model-callable functions. Describing what an MCP *resource*
 // is (not a file, not an HTTP URL) is what makes the model use these well — see §3.3.3.
-var resourceTools = new ResourceTools(clientManager);
+// The approval prompt a real host would show the user. The scripted user declines: they
+// asked for the wiki's release notes, not for anything from another server.
+var originPolicy = new OriginPolicy((origins, serverName, uri) =>
+{
+    Console.WriteLine($"[approval] This conversation holds content from '{string.Join("', '", origins)}'. " +
+                      $"Allow the model to read '{uri}' from '{serverName}'? -> declined (scripted user)\n");
+    return false;
+});
+var resourceTools = new ResourceTools(clientManager, originPolicy);
 var tools = new List<AITool>
 {
     AIFunctionFactory.Create(resourceTools.ListResources, "list_resources",

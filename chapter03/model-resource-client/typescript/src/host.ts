@@ -6,13 +6,15 @@
 // across ALL connected servers, tagging each entry with a host-assigned server name;
 // the read tool routes a read to the right server by that name. To prove the
 // aggregation, this host spawns the SAME demo server twice under different labels
-// ("docs" and "wiki") — same catalog, distinct routing keys.
+// ("docs" and "wiki") — same catalog, distinct routing keys. The read tool enforces the
+// cross-server origin policy: after reading from "wiki", the scripted model tries a read
+// from "docs", and the host asks the (scripted) user, who declines.
 //
 // Usage: node dist/host.js
 
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { ClientManager, ResourceTools } from './resource-tools.js';
+import { ClientManager, OriginPolicy, ResourceTools } from './resource-tools.js';
 import { ChatMessage, ScriptedChatClient } from './scripted-chat-client.js';
 
 const clientManager = new ClientManager();
@@ -28,7 +30,16 @@ console.log(
 
 // Wrap the two methods as model-callable functions. Describing what an MCP *resource*
 // is (not a file, not an HTTP URL) is what makes the model use these well — see §3.3.3.
-const resourceTools = new ResourceTools(clientManager);
+// The approval prompt a real host would show the user. The scripted user declines: they
+// asked for the wiki's release notes, not for anything from another server.
+const originPolicy = new OriginPolicy((origins, serverName, uri) => {
+  console.log(
+    `[approval] This conversation holds content from '${[...origins].join("', '")}'. ` +
+      `Allow the model to read '${uri}' from '${serverName}'? -> declined (scripted user)\n`,
+  );
+  return false;
+});
+const resourceTools = new ResourceTools(clientManager, originPolicy);
 const tools: Array<{
   name: string;
   description: string;

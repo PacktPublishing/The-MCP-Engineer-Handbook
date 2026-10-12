@@ -24,7 +24,10 @@ export interface ResourceMetadata {
 }
 
 export class ResourceTools {
-  constructor(private readonly clientManager: ClientManager) {}
+  constructor(
+    private readonly clientManager: ClientManager,
+    private readonly originPolicy: OriginPolicy,
+  ) {}
 
   // Lists available resources from connected servers.
   async listResources(): Promise<ResourceMetadata[]> {
@@ -39,9 +42,46 @@ export class ResourceTools {
 
   // Reads a resource by server name and URI.
   async readResource(serverName: string, uri: string): Promise<string> {
-    const result = await
-      this.clientManager.getClient(serverName).readResource({ uri });
+    const client = this.clientManager.getClient(serverName);
+    // Enforced here, at execution, whatever call the model generated.
+    const denial = this.originPolicy.checkRead(serverName, uri);
+    if (denial !== undefined) return denial;
+    const result = await client.readResource({ uri });
     return formatResourceContent(result);
+  }
+}
+
+// The cross-server origin policy from §3.3.3. A valid serverName is a routing key, not
+// an authorization: content from one server can instruct the model to read from another
+// (the confused deputy). So a conversation is bound to the servers whose content it
+// already holds, and a read from any other server needs explicit user approval naming
+// both sides. One instance per conversation.
+export class OriginPolicy {
+  private readonly origins = new Set<string>();
+
+  constructor(
+    private readonly approveCrossOriginRead: (
+      origins: ReadonlySet<string>,
+      serverName: string,
+      uri: string,
+    ) => boolean,
+  ) {}
+
+  // Returns undefined when the read may proceed, otherwise a denial the model can read.
+  checkRead(serverName: string, uri: string): string | undefined {
+    if (
+      this.origins.size > 0 &&
+      !this.origins.has(serverName) &&
+      !this.approveCrossOriginRead(this.origins, serverName, uri)
+    ) {
+      return (
+        `Read denied by host policy: this conversation holds content from ` +
+        `'${[...this.origins].join("', '")}', and the user did not approve reading ` +
+        `'${uri}' from '${serverName}'.`
+      );
+    }
+    this.origins.add(serverName);
+    return undefined;
   }
 }
 

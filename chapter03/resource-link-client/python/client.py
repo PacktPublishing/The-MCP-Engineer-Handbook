@@ -8,7 +8,11 @@
 #      demo server's get_tip_of_the_day
 #   2. the production version — size budget, MIME-type filtering, error handling for
 #      failed reads, and a depth guard against link chains — run against
-#      get_research_bundle, whose five links exercise every guard
+#      get_research_bundle, whose five links exercise those guards
+#   3. the same resolver's per-pass limits — byte budget, link limit, deadline — plus
+#      cycle-vs-duplicate handling, against tool results shaped the way a careless or
+#      hostile server might return them: once a pass limit trips, the rest of the
+#      result is summarized in one notice instead of one notice per link
 #
 # Usage: uv run client.py
 import asyncio
@@ -62,6 +66,73 @@ async def main() -> None:
         ))
         print_blocks("after hardened resolution", await resolver.resolve(bundle_result.content, client))
 
+        # --- 3. Per-pass limits against tool results that misbehave as a whole -----
+
+        # The demo server's tools are well-behaved, so these tool results are built
+        # client-side, the way a careless or hostile server could return them. Every
+        # read still goes to the real server.
+
+        print("=" * 78)
+        print("3a. Per-resource guards and the pass byte budget (repeats / understated size /")
+        print("    multi-item read / cycle / pass byte budget)")
+        print("=" * 78)
+
+        misbehaving: list[ContentBlock] = [
+            _link("file:///release_notes.md", "release_notes"),
+            _link("file:///release_notes.md", "release_notes"),  # duplicate, not a cycle
+            _link("file:///release_notes.md", "release_notes"),  # further repeat: counted only
+            _link("file:///big_dataset.csv", "big_dataset", size=2048),  # understated
+            _link("file://notes/7/attachments", "note_attachments"),  # 3 items, 18 000 bytes
+            _link("chain://a", "chain_a"),  # a -> b -> c -> a
+            _link("file:///user_guide.md", "user_guide"),
+            *(_link(f"file://user/{id}/preferences.md", f"preferences_{id}") for id in range(1, 6)),
+        ]
+        print_blocks("tool result as returned", misbehaving)
+
+        strict_resolver = HardenedLinkResolver(LinkResolutionOptions(
+            max_resource_bytes=16 * 1024,  # big_dataset's real 64 015 bytes and the 3 x 6 000-byte
+                                           # attachments -> rejected after reading
+            max_total_bytes=1024,          # user_guide (571 bytes) no longer fits: the pass stops
+            allowed_mime_prefixes=["text/", "application/json"],
+            max_depth=4,                   # deep enough that the chain's return to a is seen as a cycle
+        ))
+        print_blocks("after hardened resolution", await strict_resolver.resolve(misbehaving, client))
+
+        print("=" * 78)
+        print("3b. A tool result with 1 000 links (link limit)")
+        print("=" * 78)
+
+        link_flood: list[ContentBlock] = [
+            _link(f"file://user/{id}/preferences.md", f"preferences_{id}") for id in range(1, 1001)
+        ]
+        print(f"--- tool result as returned ({len(link_flood)} block(s): "
+              "file://user/1/preferences.md … file://user/1000/preferences.md) ---\n")
+
+        flood_resolver = HardenedLinkResolver(LinkResolutionOptions(
+            max_links=4,  # links 5..1000 end up in one summary notice
+        ))
+        print_blocks("after hardened resolution", await flood_resolver.resolve(link_flood, client))
+
+        print("=" * 78)
+        print("3c. A slow read and the pass deadline")
+        print("=" * 78)
+
+        slow: list[ContentBlock] = [
+            _link("file://exports/2026-q3/telemetry.csv", "telemetry_export"),  # takes 3 s
+            _link("file:///release_notes.md", "release_notes"),
+            _link("file:///helpful_tip.txt", "helpful_tip"),
+        ]
+        print_blocks("tool result as returned", slow)
+
+        hurried_resolver = HardenedLinkResolver(LinkResolutionOptions(
+            timeout=1.0,  # the export read is cancelled; the rest is summarized
+        ))
+        print_blocks("after hardened resolution", await hurried_resolver.resolve(slow, client))
+
+
+def _link(uri: str, name: str, size: int | None = None) -> ResourceLink:
+    return ResourceLink(type="resource_link", uri=uri, name=name, size=size)
+
 
 # §3.3.4 book extract: the core is a substitution pass over the tool result's content
 # blocks. Links must be resolved against the server that returned them — never a
@@ -97,8 +168,21 @@ def to_content_block(contents: ResourceContents) -> ContentBlock:
 @dataclass
 class LinkResolutionOptions:
     # Budget per linked resource, checked against the link's declared size before
-    # reading and against the actual content after.
+    # reading and against the actual bytes of every content item the read returned after.
     max_resource_bytes: int = 16 * 1024
+
+    # Budget for the whole pass: bytes accepted from all reads made while resolving
+    # one tool result.
+    max_total_bytes: int = 64 * 1024
+
+    # Maximum links handled per pass (read, or dropped by a guard), however many the
+    # tool result (or the chains it starts) contains. Repeats of a link already
+    # handled don't count.
+    max_links: int = 16
+
+    # Deadline for the whole pass, in seconds. A read still in flight when it passes
+    # is cancelled.
+    timeout: float = 30.0
 
     # MIME-type prefixes the target model can actually consume.
     allowed_mime_prefixes: list[str] = field(default_factory=lambda: ["text/"])
@@ -108,11 +192,29 @@ class LinkResolutionOptions:
     max_depth: int = 2
 
 
+# State for ONE resolution pass (one tool result). The budgets live here rather than
+# per link, so a result carrying thousands of small links is bounded as a whole.
+@dataclass
+class ResolutionPass:
+    deadline: float  # event-loop time at which the pass gives up
+    active_path: set[str] = field(default_factory=set)  # URIs on the chain being followed now
+    seen: set[str] = field(default_factory=set)  # every URI this pass has started on
+    noted: set[str] = field(default_factory=set)  # URIs that already have a repeat notice
+    bytes: int = 0  # bytes accepted from reads so far
+    links: int = 0  # links handled so far (see max_links)
+    stop_reason: str | None = None  # the pass limit that tripped, if any
+    skipped: int = 0  # links left unresolved after it tripped
+    skipped_uris: list[str] = field(default_factory=list)  # the first few of them, for the summary
+    repeats_omitted: int = 0  # repeats beyond the first, per URI
+
+
 # What the book page leaves out (§3.3.4): a resource link can point at ANYTHING, so
-# production resolution needs a size budget, MIME filtering for model compatibility,
-# error handling for failed reads, and a depth guard against link chains. Where a
-# guard drops a link, an explanatory text block takes its place so the model knows
-# what happened instead of silently losing context.
+# production resolution needs size budgets, MIME filtering for model compatibility,
+# error handling for failed reads, and guards that make link chains and link-heavy
+# results terminate. Where a guard drops a link, an explanatory text block takes its
+# place so the model knows what happened instead of silently losing context. Once a
+# pass limit trips, the links still left get ONE summary notice instead of one each,
+# so the notices stay bounded too.
 class HardenedLinkResolver:
     def __init__(self, options: LinkResolutionOptions) -> None:
         self._options = options
@@ -120,32 +222,62 @@ class HardenedLinkResolver:
     async def resolve(
         self, content: list[ContentBlock], client: Client
     ) -> list[ContentBlock]:
-        visited: set[str] = set()  # cycle detection across the whole pass
-        return await self._resolve_at_depth(content, client, depth=1, visited=visited)
+        deadline = asyncio.get_running_loop().time() + self._options.timeout
+        pass_ = ResolutionPass(deadline)
+        resolved = await self._resolve_at_depth(content, client, 1, pass_)
+        resolved.extend(_summary(pass_))
+        return resolved
 
     async def _resolve_at_depth(
-        self, content: list[ContentBlock], client: Client, depth: int, visited: set[str]
+        self, content: list[ContentBlock], client: Client, depth: int, pass_: ResolutionPass
     ) -> list[ContentBlock]:
         resolved: list[ContentBlock] = []
         for block in content:
             if isinstance(block, ResourceLink):
-                resolved.extend(await self._resolve_one_link(block, client, depth, visited))
+                resolved.extend(await self._resolve_one_link(block, client, depth, pass_))
             else:
                 resolved.append(block)
         return resolved
 
     async def _resolve_one_link(
-        self, link: ResourceLink, client: Client, depth: int, visited: set[str]
+        self, link: ResourceLink, client: Client, depth: int, pass_: ResolutionPass
     ) -> list[ContentBlock]:
         options = self._options
+
+        # A pass limit has tripped: the rest of the result goes into the summary.
+        if pass_.stop_reason is not None:
+            return _skip(link, pass_)
+
         print(f"  [resolve] {link.uri} (depth {depth})")
 
-        # Depth guard: link chains (and cycles) must terminate.
+        # Cycle vs. duplicate: only a URI on the chain currently being followed is a
+        # cycle. Two links to the same URI side by side, or two chains converging on one
+        # resource, are ordinary repetition: point at the earlier result, don't re-read.
+        if link.uri in pass_.seen and link.uri not in pass_.active_path:
+            return _duplicate(link, pass_)
+
+        # Link limit: bound the pass as a whole, however many links it holds.
+        if pass_.links >= options.max_links:
+            return _stop(link, pass_, f"link limit of {options.max_links} per pass reached")
+        pass_.links += 1
+
+        # Depth guard: link chains must terminate.
         if depth > options.max_depth:
             return _drop(link, f"chain depth {depth} exceeds the maximum of {options.max_depth}")
-        if link.uri in visited:
-            return _drop(link, "link cycle detected — this URI was already resolved in this pass")
-        visited.add(link.uri)
+        if link.uri in pass_.active_path:
+            return _drop(link, "link cycle detected — this URI is already being resolved further up the chain")
+
+        pass_.seen.add(link.uri)
+        pass_.active_path.add(link.uri)
+        try:
+            return await self._read_and_substitute(link, client, depth, pass_)
+        finally:
+            pass_.active_path.discard(link.uri)
+
+    async def _read_and_substitute(
+        self, link: ResourceLink, client: Client, depth: int, pass_: ResolutionPass
+    ) -> list[ContentBlock]:
+        options = self._options
 
         # Size budget, part 1: a declared size lets us reject without reading at all.
         if link.size is not None and link.size > options.max_resource_bytes:
@@ -158,35 +290,51 @@ class HardenedLinkResolver:
         if link.mime_type is not None and not self._mime_allowed(link.mime_type):
             return _drop(link, f"declared MIME type '{link.mime_type}' is not model-compatible")
 
+        # Deadline: bound the pass in time as well.
+        if asyncio.get_running_loop().time() >= pass_.deadline:
+            return _stop(link, pass_, f"pass deadline of {options.timeout:g}s has passed")
+
         # Error handling: a link is a promise the server doesn't have to keep.
         try:
-            read = await client.read_resource(link.uri)
+            async with asyncio.timeout_at(pass_.deadline):
+                read = await client.read_resource(link.uri)
         except MCPError as error:
             return _drop(link, f"read failed: {error}")
+        except TimeoutError:
+            pass_.stop_reason = f"pass deadline of {options.timeout:g}s has passed"
+            return _drop(link, f"read cancelled: {pass_.stop_reason}")
+
+        # Size budget, part 2: links may omit or understate their size, so count what the
+        # read actually returned — across ALL its content items, since one resource can
+        # return many. The response is already in memory by now: this bounds what
+        # reaches the model, not what the transport buffers.
+        read_bytes = sum(_content_bytes(contents) for contents in read.contents)
+        if read_bytes > options.max_resource_bytes:
+            return _drop(
+                link,
+                f"content size {read_bytes}{_declared(link)} exceeds the budget of "
+                f"{options.max_resource_bytes} bytes",
+            )
+        if pass_.bytes + read_bytes > options.max_total_bytes:
+            pass_.stop_reason = f"pass budget of {options.max_total_bytes} bytes reached"
+            return _drop(
+                link,
+                f"content size {read_bytes} would exceed the pass budget of "
+                f"{options.max_total_bytes} bytes ({pass_.bytes} already used)",
+            )
+        pass_.bytes += read_bytes
 
         resolved: list[ContentBlock] = []
         for contents in read.contents:
-            # MIME filter and size budget, part 2: links may omit metadata, so re-check
-            # what the read actually returned.
+            # MIME filter, part 2: links may omit metadata, so re-check every item.
             actual_mime = contents.mime_type or link.mime_type
             if actual_mime is not None and not self._mime_allowed(actual_mime):
                 resolved.extend(
                     _drop(link, f"content MIME type '{actual_mime}' is not model-compatible")
                 )
                 continue
-            if isinstance(contents, TextResourceContents):
-                actual_size = len((contents.text or "").encode("utf-8"))
-            else:
-                # non-text got past the filter without a type: don't inject it
-                actual_size = options.max_resource_bytes + 1
-            if actual_size > options.max_resource_bytes:
-                resolved.extend(
-                    _drop(
-                        link,
-                        f"content size {actual_size} exceeds the budget of "
-                        f"{options.max_resource_bytes} bytes",
-                    )
-                )
+            if actual_mime is None and isinstance(contents, BlobResourceContents):
+                resolved.extend(_drop(link, "binary content without a MIME type"))
                 continue
 
             # Chain convention: a read result cannot carry a resource link natively
@@ -199,7 +347,7 @@ class HardenedLinkResolver:
                 and (onward_link := _try_parse_link(contents.text)) is not None
             ):
                 resolved.extend(
-                    await self._resolve_one_link(onward_link, client, depth + 1, visited)
+                    await self._resolve_one_link(onward_link, client, depth + 1, pass_)
                 )
                 continue
 
@@ -208,6 +356,19 @@ class HardenedLinkResolver:
 
     def _mime_allowed(self, mime_type: str) -> bool:
         return any(mime_type.startswith(prefix) for prefix in self._options.allowed_mime_prefixes)
+
+
+def _content_bytes(contents: ResourceContents) -> int:
+    if isinstance(contents, TextResourceContents):
+        return len((contents.text or "").encode("utf-8"))
+    if isinstance(contents, BlobResourceContents):
+        # decoded size of the base64 payload, without decoding it
+        return len(contents.blob) * 3 // 4 - contents.blob[-2:].count("=")
+    return 0
+
+
+def _declared(link: ResourceLink) -> str:
+    return f" (the link declared {link.size})" if link.size is not None else ""
 
 
 def _try_parse_link(json_text: str) -> ResourceLink | None:
@@ -229,6 +390,60 @@ def _drop(link: ResourceLink, reason: str) -> list[ContentBlock]:
             text=f"[resource link '{link.name}' ({link.uri}) was not resolved: {reason}]",
         )
     ]
+
+
+# A repeated link is not an error: refer the model to the earlier occurrence — once per
+# URI. Further repeats are only counted, for the summary.
+def _duplicate(link: ResourceLink, pass_: ResolutionPass) -> list[ContentBlock]:
+    if link.uri in pass_.noted:
+        print(f"  [dedupe]  {link.uri}: repeat omitted (counted for the summary)")
+        pass_.repeats_omitted += 1
+        return []
+    pass_.noted.add(link.uri)
+    print(f"  [dedupe]  {link.uri}: already handled earlier in this pass")
+    return [
+        TextContent(
+            type="text",
+            text=f"[resource link '{link.name}' ({link.uri}) repeats an earlier link in this result; "
+            "see its content, or why it was not resolved, above]",
+        )
+    ]
+
+
+# A pass limit trips: no more reads this pass, and this link is the first one left.
+def _stop(link: ResourceLink, pass_: ResolutionPass, reason: str) -> list[ContentBlock]:
+    print(f"  [limit]   {reason}: the remaining links are summarized")
+    pass_.stop_reason = reason
+    return _skip(link, pass_)
+
+
+def _skip(link: ResourceLink, pass_: ResolutionPass) -> list[ContentBlock]:
+    pass_.skipped += 1
+    if len(pass_.skipped_uris) < 3 and link.uri not in pass_.skipped_uris:
+        pass_.skipped_uris.append(link.uri)
+    return []
+
+
+# One notice for everything a tripped limit left unresolved, and one for omitted
+# repeats — however many links that is.
+def _summary(pass_: ResolutionPass) -> list[ContentBlock]:
+    notices: list[ContentBlock] = []
+    if pass_.skipped > 0:
+        more = pass_.skipped - len(pass_.skipped_uris)
+        uris = ", ".join(pass_.skipped_uris) + (f" and {more} more" if more > 0 else "")
+        print(f"  [summary] {pass_.skipped} further link(s) not resolved: {pass_.stop_reason}")
+        notices.append(TextContent(
+            type="text",
+            text=f"[{pass_.skipped} further resource link(s) in this result were not resolved: "
+            f"{pass_.stop_reason}. Not resolved: {uris}]",
+        ))
+    if pass_.repeats_omitted > 0:
+        print(f"  [summary] {pass_.repeats_omitted} further repeat(s) omitted")
+        notices.append(TextContent(
+            type="text",
+            text=f"[{pass_.repeats_omitted} further repeat(s) of resource links already handled above were omitted]",
+        ))
+    return notices
 
 
 def print_blocks(label: str, blocks: list[ContentBlock]) -> None:

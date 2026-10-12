@@ -4,6 +4,7 @@
 # shape, and the two format helpers are the plumbing the extract elides.
 from __future__ import annotations
 
+from collections.abc import Callable, Collection
 from contextlib import AsyncExitStack
 from typing import Any
 
@@ -13,8 +14,9 @@ from mcp_types import BlobResourceContents, ReadResourceResult, Resource, TextRe
 
 
 class ResourceTools:
-    def __init__(self, client_manager: "ClientManager") -> None:
+    def __init__(self, client_manager: "ClientManager", origin_policy: "OriginPolicy") -> None:
         self._client_manager = client_manager
+        self._origin_policy = origin_policy
 
     async def list_resources(self) -> list[dict[str, Any]]:
         """Lists available resources from connected servers."""
@@ -27,8 +29,41 @@ class ResourceTools:
 
     async def read_resource(self, server_name: str, uri: str) -> str:
         """Reads a resource by server name and URI."""
-        result = await self._client_manager.get_client(server_name).read_resource(uri)
+        client = self._client_manager.get_client(server_name)
+        # Enforced here, at execution, whatever call the model generated.
+        if (denial := self._origin_policy.check_read(server_name, uri)) is not None:
+            return denial
+        result = await client.read_resource(uri)
         return _format_resource_content(result)
+
+
+# The cross-server origin policy from §3.3.3. A valid server_name is a routing key, not
+# an authorization: content from one server can instruct the model to read from another
+# (the confused deputy). So a conversation is bound to the servers whose content it
+# already holds, and a read from any other server needs explicit user approval naming
+# both sides. One instance per conversation.
+class OriginPolicy:
+    def __init__(
+        self, approve_cross_origin_read: Callable[[Collection[str], str, str], bool]
+    ) -> None:
+        self._approve_cross_origin_read = approve_cross_origin_read
+        self._origins: list[str] = []
+
+    def check_read(self, server_name: str, uri: str) -> str | None:
+        """Returns None when the read may proceed, otherwise a denial the model can read."""
+        if (
+            self._origins
+            and server_name not in self._origins
+            and not self._approve_cross_origin_read(self._origins, server_name, uri)
+        ):
+            origins = "', '".join(self._origins)
+            return (
+                f"Read denied by host policy: this conversation holds content from "
+                f"'{origins}', and the user did not approve reading '{uri}' from '{server_name}'."
+            )
+        if server_name not in self._origins:
+            self._origins.append(server_name)
+        return None
 
 
 # Tag every entry with the HOST-ASSIGNED server name so the model can route reads —

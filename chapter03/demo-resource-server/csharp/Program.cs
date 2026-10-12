@@ -11,7 +11,9 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
+using System.Reflection;
 using System.Text;
+using System.Text.Json;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -22,9 +24,50 @@ builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithTools<DemoTools>()
-    .WithResources<DemoResources>();
+    .WithResources<DemoResources>()
+    // The SDK keeps registered primitives in a hash-keyed dictionary, so its lists come
+    // back in hash order: arbitrary for tools, and different on every run for resources
+    // and templates. Restore declaration order (the order the Python and TypeScript
+    // ports list them in) so clients see a stable catalog.
+    .WithRequestFilters(filters =>
+    {
+        var resourceOrder = DeclarationOrder<DemoResources, McpServerResourceAttribute>(
+            (attribute, _) => attribute.UriTemplate!);
+        var toolOrder = DeclarationOrder<DemoTools, McpServerToolAttribute>(
+            (attribute, method) => attribute.Name ?? JsonNamingPolicy.SnakeCaseLower.ConvertName(method.Name));
+
+        filters.AddListResourcesFilter(next => async (request, cancellationToken) =>
+        {
+            var result = await next(request, cancellationToken);
+            result.Resources = [.. result.Resources.OrderBy(r => resourceOrder.GetValueOrDefault(r.Uri, int.MaxValue))];
+            return result;
+        });
+        filters.AddListResourceTemplatesFilter(next => async (request, cancellationToken) =>
+        {
+            var result = await next(request, cancellationToken);
+            result.ResourceTemplates = [.. result.ResourceTemplates.OrderBy(t => resourceOrder.GetValueOrDefault(t.UriTemplate, int.MaxValue))];
+            return result;
+        });
+        filters.AddListToolsFilter(next => async (request, cancellationToken) =>
+        {
+            var result = await next(request, cancellationToken);
+            result.Tools = [.. result.Tools.OrderBy(t => toolOrder.GetValueOrDefault(t.Name, int.MaxValue))];
+            return result;
+        });
+    });
 
 await builder.Build().RunAsync();
+
+// Maps each attributed method's key to its position in the source file. Metadata tokens
+// follow declaration order, unlike GetMethods(), whose order is unspecified.
+static Dictionary<string, int> DeclarationOrder<TType, TAttribute>(Func<TAttribute, MethodInfo, string> key)
+    where TAttribute : Attribute =>
+    typeof(TType)
+        .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
+        .Where(method => method.GetCustomAttribute<TAttribute>() is not null)
+        .OrderBy(method => method.MetadataToken)
+        .Select((method, index) => (Key: key(method.GetCustomAttribute<TAttribute>()!, method), index))
+        .ToDictionary(entry => entry.Key, entry => entry.index);
 
 [McpServerToolType]
 public class DemoTools
@@ -176,6 +219,38 @@ public class DemoResources
      Description("Third hop of the link chain — points back to chain://a.")]
     public static string ChainC() => """{"type":"resource_link","uri":"chain://a","name":"chain_a"}""";
 
+    // Two more for the resolver's per-pass limits. They are templates rather than fixed
+    // resources so they stay out of resources/list, which the other chapter 3 samples
+    // show to the model.
+
+    public const int AttachmentSize = 6_000;
+
+    // ONE read, several content items: each attachment fits a 16 KiB per-resource
+    // budget on its own, but the three together don't.
+    [McpServerResource(UriTemplate = "file://notes/{id}/attachments", Name = "note_attachments",
+        MimeType = "text/markdown"),
+     Description("Every attachment of a note, one content item each (3 x 6 000 bytes).")]
+    public static IEnumerable<ResourceContents> NoteAttachments(
+        RequestContext<ReadResourceRequestParams> requestContext, int id) =>
+        Enumerable.Range(1, 3).Select(n => new TextResourceContents
+        {
+            Uri = requestContext.Params!.Uri!,
+            MimeType = "text/markdown",
+            Text = ($"# Attachment {n} of note {id}\n\n" +
+                    string.Concat(Enumerable.Repeat("Transcript excerpt. ", 300)))[..AttachmentSize],
+        });
+
+    // A slow read: the export is "generated on demand" and takes three seconds — longer
+    // than the deadline the resource-link-client's last pass allows.
+    [McpServerResource(UriTemplate = "file://exports/{quarter}/telemetry.csv", Name = "telemetry_export",
+        MimeType = "text/csv"),
+     Description("A telemetry export generated on demand. Deliberately slow (3 s) to exercise client deadlines.")]
+    public static async Task<string> TelemetryExport(string quarter, CancellationToken cancellationToken)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(3), cancellationToken);
+        return $"quarter,active_users\n{quarter},1234\n";
+    }
+
     // --- Resource templates (§3.4.1) -------------------------------------------------
 
     // Book extract (§3.4.1): the attribute declares the template; the SDK routes any
@@ -194,20 +269,18 @@ public class DemoResources
         };
     }
 
-    // An RFC 6570 LEVEL-4 template (explode modifier on a query expansion). 2.0.0
-    // accepts and advertises the syntax, but routing rejects the repeated-key
-    // expansion (?tags=a&tags=b -> -32602) and binds the value as a scalar
-    // (?tags=a,b binds the string "a,b") — an array parameter here throws at bind
-    // time. Partial expansions (?tags=a with limit omitted) route, but at GA an
-    // omitted variable binds only if the parameter declares a DEFAULT VALUE —
-    // nullability alone made it optional in preview.1; without `= null` GA throws
-    // "Missing a value for the required parameter" (-32603). See the sample
-    // READMEs for the full verdict on the SDK's URI-template support.
+    // An RFC 6570 LEVEL-4 template (explode modifier on a query expansion), kept as a
+    // record of what the SDK does with it. 2.0.0 accepts and advertises the syntax but
+    // matches it as a plain query expansion: the repeated-key form ?tags=a&tags=b is
+    // rejected (-32602) and ?tags=a,b binds the scalar string "a,b". Omitted variables
+    // bind only because both parameters declare a DEFAULT VALUE — nullability alone
+    // is not enough at GA. The result echoes the bindings as JSON so the README's
+    // compatibility table can be reproduced; see the README for the observed matrix.
     [McpServerResource(UriTemplate = "docs://search{?tags*,limit}", Name = "doc_search"),
      Description("Searches the documentation catalog by tag.")]
     public static string SearchDocs(string? tags = null, int? limit = null)
     {
-        return $"Search results for tags [{tags ?? "(none)"}] (limit {limit?.ToString() ?? "default"}): " +
+        return $"Search results (bound tags={JsonSerializer.Serialize(tags)}, limit={JsonSerializer.Serialize(limit)}): " +
                "user_guide.md, release_notes.md";
     }
 }
