@@ -8,7 +8,9 @@
 // inputResponses and a byte-exact requestState echo on a fresh request id,
 // up to a HARD-CODED 10 rounds. There is no opt-out, no way to see the
 // interim result, and no budget knob — so the retry budget you control is
-// the SDK's fixed 10, and timeout/cancel come from the CancellationToken.
+// the SDK's fixed 10, and deadline/cancel come from the CancellationToken. The
+// SDK passes that token on to the ElicitationHandler, so it also reaches an
+// open prompt.
 //
 // --manual mode — the book's gather-and-retry loop with a configurable
 // budget, expressed over the raw transport (see ManualLoop.cs for why the
@@ -17,7 +19,9 @@
 // Run (after `dotnet build` of both projects, from the csharp/ directory):
 //   dotnet run --project MrtrClient -- [book_meeting|never_satisfied] [--manual]
 // Env: MRTR_ANSWERS / MRTR_POLICY (see InputHandler.cs); MRTR_MAX_ROUNDS
-// (manual mode only — the native path's 10 is not configurable).
+// (manual mode only — the native path's 10 is not configurable);
+// MRTR_TIMEOUT_MS (whole-flow deadline, default 120000); MRTR_CANCEL_AFTER_MS
+// (simulates the user pressing cancel, for tests).
 
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
@@ -26,6 +30,8 @@ using System.Text.Json.Nodes;
 var manual = args.Contains("--manual");
 var toolName = args.FirstOrDefault(a => !a.StartsWith('-')) ?? "book_meeting";
 var maxRounds = int.TryParse(Environment.GetEnvironmentVariable("MRTR_MAX_ROUNDS"), out var mr) ? mr : 10;
+var timeout = TimeSpan.FromMilliseconds(
+    int.TryParse(Environment.GetEnvironmentVariable("MRTR_TIMEOUT_MS"), out var tm) ? tm : 120_000);
 
 // The companion server, built alongside this project.
 var serverDll = Path.GetFullPath(Path.Combine(
@@ -42,10 +48,17 @@ var transport = new StdioClientTransport(new StdioClientTransportOptions
     Name = "mrtr-demo-server",
 });
 
-// User-facing cancel: Ctrl+C cancels the in-flight call and the loop.
-// Whole-flow timeout: 120 s across all rounds.
-using var canceller = new CancellationTokenSource(TimeSpan.FromSeconds(120));
-Console.CancelKeyPress += (_, e) => { e.Cancel = true; canceller.Cancel(); };
+// User-facing cancel: Ctrl+C cancels the in-flight call, an open prompt, and
+// the loop. MRTR_CANCEL_AFTER_MS simulates the press.
+using var userCancel = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; userCancel.Cancel(); };
+if (int.TryParse(Environment.GetEnvironmentVariable("MRTR_CANCEL_AFTER_MS"), out var cancelAfter))
+{
+    userCancel.CancelAfter(cancelAfter);
+}
+// The native path's whole-flow deadline (the manual loop builds its own).
+using var deadline = new CancellationTokenSource(timeout);
+using var canceller = CancellationTokenSource.CreateLinkedTokenSource(userCancel.Token, deadline.Token);
 
 try
 {
@@ -55,9 +68,8 @@ try
         await using var session = await transport.ConnectAsync(canceller.Token);
         Console.WriteLine($"-> tools/call {toolName} (manual gather-and-retry loop)");
         var arguments = toolName == "book_meeting" ? new JsonObject { ["room"] = "4B" } : [];
-        var result = await ManualLoop.CallToolGatheringInputAsync(
-            session, toolName, arguments, maxRounds, TimeSpan.FromSeconds(120), canceller.Token);
-        Console.WriteLine($"<- final result: {FirstText(result)}");
+        return await Report(() => ManualLoop.CallToolGatheringInputAsync(
+            session, toolName, arguments, maxRounds, timeout, userCancel.Token));
     }
     else
     {
@@ -72,8 +84,9 @@ try
                 // The SDK's MRTR driver dispatches embedded elicitation
                 // requests here. Form rendering, policy, and validation stay
                 // ours — see InputHandler.cs.
-                ElicitationHandler = (request, _) =>
-                    InputHandler.HandleElicitationAsync(request ?? throw new ArgumentNullException(nameof(request))),
+                ElicitationHandler = (request, cancel) =>
+                    InputHandler.HandleElicitationAsync(
+                        request ?? throw new ArgumentNullException(nameof(request)), cancel),
             },
             // ProtocolVersion unset: probe server/discover, prefer 2026-07-28.
         };
@@ -81,10 +94,8 @@ try
         Console.WriteLine(
             $"-> tools/call {toolName} (SDK drives the MRTR rounds; negotiated {client.NegotiatedProtocolVersion})");
         var arguments = toolName == "book_meeting" ? new Dictionary<string, object?> { ["room"] = "4B" } : [];
-        var result = await client.CallToolAsync(toolName, arguments, cancellationToken: canceller.Token);
-        Console.WriteLine($"<- final result: {FirstText(result)}");
+        return await Report(() => client.CallToolAsync(toolName, arguments, cancellationToken: canceller.Token).AsTask());
     }
-    return 0;
 }
 catch (Exception error) when (error is not OperationCanceledException)
 {
@@ -93,7 +104,32 @@ catch (Exception error) when (error is not OperationCanceledException)
 }
 catch (OperationCanceledException)
 {
-    Console.WriteLine("<- failed: tool call cancelled or timed out");
+    Console.WriteLine(userCancel.IsCancellationRequested
+        ? "<- failed: tool call cancelled by the user"
+        : $"<- failed: tool call still gathering input after {timeout.TotalMilliseconds} ms");
+    return 1;
+}
+
+// Report the outcome inside the connection's scope: disposing the stdio
+// transport waits for the server process to exit, and a failure shouldn't
+// sit behind that.
+async Task<int> Report(Func<Task<CallToolResult>> call)
+{
+    try
+    {
+        Console.WriteLine($"<- final result: {FirstText(await call())}");
+        return 0;
+    }
+    catch (OperationCanceledException)
+    {
+        Console.WriteLine(userCancel.IsCancellationRequested
+            ? "<- failed: tool call cancelled by the user"
+            : $"<- failed: tool call still gathering input after {timeout.TotalMilliseconds} ms");
+    }
+    catch (Exception error)
+    {
+        Console.WriteLine($"<- failed: {error.Message}");
+    }
     return 1;
 }
 

@@ -4,12 +4,29 @@ Companion sample for **Chapter 6, Section 6.2.5 — Implementing Elicitation (Cl
 
 On the `2026-07-28` revision, elicitation arrives through the multi round-trip request (MRTR) pattern: the server answers `tools/call` with an `input_required` result carrying embedded `elicitation/create` requests and an opaque `requestState`; the client gathers answers and re-issues the call. This sample implements the client side both ways:
 
-- **`src/mrtr-client.ts` — the manual gather-and-retry loop** (the book's teaching path). `callToolGatheringInput` matches the chapter's printed snippet; `callToolGatheringInputBounded` adds the production bounds the chapter calls for (retry budget, whole-flow timeout, user-facing cancel via `AbortSignal`).
+- **`src/mrtr-client.ts` — the manual gather-and-retry loop** (the book's teaching path). `callToolGatheringInput` matches the chapter's printed snippet, including its cap of 10 rounds (the default cap in all three SDKs); `callToolGatheringInputBounded` adds what the chapter says production code also needs: a configurable retry budget, a deadline that covers the time the user spends answering (not just the network calls), and a user-facing cancel — see [Bounds](#bounds).
 - **`src/native.ts` — the SDK-native path**. In the v2 client, `callTool()` fulfils `input_required` results automatically by default, dispatching each embedded request to the handler registered via `setRequestHandler('elicitation/create', ...)` and retrying with the collected `inputResponses` and a byte-exact `requestState` echo, up to `inputRequired.maxRounds` (default 10). What the SDK does *not* do — form rendering, policy, validating user content against `requestedSchema` — stays in your handler.
 
 Both entries share **`src/input-handler.ts`**: a schema-driven console form (labels from `title`, help from `description`, pre-populated `default`s), the accept/decline/cancel three-action model, validation of user input against the requested schema before responding, and pre-user policy hooks (credential-solicitation denial; an opt-in auto-confirm policy).
 
 **`src/demo-server.ts`** is the companion server: `book_meeting` elicits a details form, then a *second* confirmation elicitation on the retry, so the loop genuinely iterates; `never_satisfied` asks forever, for retry-budget demos. Tool handlers return `inputRequired({ inputRequests, requestState })` and read retried answers with `inputResponse` / the schema-aware `acceptedContent`. Note the entry point: stdio servers must be served through `serveStdio(factory)` — a hand-wired `StdioServerTransport` connection serves the legacy era only, where MRTR does not exist.
+
+## Bounds
+
+The printed loop caps the rounds. The production loops add one deadline for the **whole** flow — every round trip *and* every prompt the user is answering — plus a user-facing cancel, and both reach an open prompt:
+
+- **TypeScript:** one `AbortSignal` (`AbortSignal.timeout` for the deadline, combined with the cancel via `AbortSignal.any`) goes to `callTool` and into `handleInputRequest`, where `readline`'s `question()` takes it. On the SDK-native path, pass the signal to `callTool` too: `maxTotalTimeout` is only checked between wire legs, so on its own it does not interrupt an open prompt. The driver hands each handler a linked per-round signal as `ctx.mcpReq.signal`.
+- **Python:** the deadline is an `anyio.fail_after` scope around the loop; the cancel is the caller's `CancelScope`. Prompts poll a queue fed by one stdin reader thread, so they are cancellable. (A bare `anyio.to_thread.run_sync(input)` is the trap: cancellation waits for the thread by default, and an abandoned thread would keep reading.)
+- **C#:** a timer-based `CancellationTokenSource` (monotonic) linked to the cancel token goes to the transport reads and into `HandleElicitationAsync`. `Console.ReadLine()` can't be cancelled, so prompts await a channel fed by one background stdin reader instead; the SDK-native path passes its token to the `ElicitationHandler`.
+
+In all three, an abandoned prompt consumes nothing, so it can't swallow a line typed for the next one. Deadline accounting uses monotonic clocks throughout.
+
+Test knobs (all entries): `MRTR_TIMEOUT_MS` (whole-flow deadline, default 120000) and `MRTR_CANCEL_AFTER_MS` (simulates the user pressing cancel). `./check-bounds.sh [typescript|python|csharp]` runs every scenario below plus deadline-while-a-prompt-is-open, cancel-while-a-form-is-open, and (TypeScript, Python) abandoned-prompt checks, holding stdin open and silent so a prompt that ignored the bound would hang. Build each port first.
+
+```bash
+# Interactive: don't answer the prompt — the call fails 5 s into the flow
+cd typescript && MRTR_TIMEOUT_MS=5000 npm start
+```
 
 ## TypeScript
 
@@ -58,7 +75,7 @@ Where the C# SDK differs from TS:
 cd csharp
 dotnet build DemoServer && dotnet build MrtrClient
 
-# SDK-native driver (default; fixed 10-round budget, timeout/cancel via CancellationToken)
+# SDK-native driver (default; fixed 10-round budget, deadline/cancel via CancellationToken)
 MRTR_ANSWERS='[{"title":"Sprint sync","duration":"30"},{"confirm":true}]' dotnet run --project MrtrClient --no-build
 
 # Manual loop over the raw transport (configurable budget)
@@ -88,7 +105,7 @@ Where the Python SDK differs from TS:
 cd python
 uv sync
 
-# Manual loop (mrtr_client.py; bounded — retry budget, 120 s deadline, Ctrl+C cancel)
+# Manual loop (mrtr_client.py; bounded — retry budget, 120 s deadline that includes answering time, Ctrl+C cancel)
 MRTR_ANSWERS='[{"title":"Sprint sync","duration":"30"},{"confirm":true}]' uv run mrtr_client.py
 MRTR_ANSWERS='[{"action":"decline"}]' uv run mrtr_client.py
 MRTR_MAX_ROUNDS=3 MRTR_ANSWERS='[{"again":true},{"again":true},{"again":true}]' uv run mrtr_client.py never_satisfied
