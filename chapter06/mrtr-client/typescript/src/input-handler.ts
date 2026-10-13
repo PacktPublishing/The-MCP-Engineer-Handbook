@@ -15,6 +15,11 @@
 //     Example: MRTR_ANSWERS='[{"title":"Sync","duration":"30"},{"confirm":true}]'
 //
 // MRTR_POLICY=autoconfirm enables the demo auto-answer policy.
+//
+// Cancellation: the optional AbortSignal (deadline and/or user cancel) reaches
+// the open prompt itself. When it fires, the pending question rejects and its
+// readline interface is closed, so an abandoned prompt can never swallow a
+// line typed for a later one.
 
 import * as readline from 'node:readline/promises';
 import type { ElicitResult } from '@modelcontextprotocol/client';
@@ -180,7 +185,8 @@ function parseInput(prop: SchemaProperty, raw: string): { ok: true; value: unkno
   return { ok: false };
 }
 
-async function renderForm(params: FormParams): Promise<ElicitResult> {
+async function renderForm(params: FormParams, signal?: AbortSignal): Promise<ElicitResult> {
+  signal?.throwIfAborted();
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   try {
     console.log(`\n${params.message}`);
@@ -195,7 +201,7 @@ async function renderForm(params: FormParams): Promise<ElicitResult> {
         prop.default !== undefined ? `default: ${prop.default}` : undefined,
       ].filter(Boolean);
       for (;;) {
-        const raw = (await rl.question(`  ${label} (${hints.join(', ')}): `)).trim();
+        const raw = (await rl.question(`  ${label} (${hints.join(', ')}): `, { signal })).trim();
         if (raw === '!decline') return { action: 'decline' };
         if (raw === '!cancel') return { action: 'cancel' };
         if (raw === '') {
@@ -234,7 +240,8 @@ async function renderForm(params: FormParams): Promise<ElicitResult> {
 // dispatches — both carry { method, params }.
 // ---------------------------------------------------------------------------
 
-export async function handleInputRequest(request: unknown): Promise<ElicitResult> {
+export async function handleInputRequest(request: unknown, signal?: AbortSignal): Promise<ElicitResult> {
+  signal?.throwIfAborted();
   const { method, params } = request as { method?: string; params?: Record<string, unknown> };
   if (method !== 'elicitation/create' || params === undefined) {
     // This host supports elicitation only (sampling is deprecated; roots n/a).
@@ -259,5 +266,5 @@ export async function handleInputRequest(request: unknown): Promise<ElicitResult
   }
 
   if (scriptedAnswers !== undefined) return nextScriptedAnswer(form);
-  return renderForm(form);
+  return renderForm(form, signal);
 }

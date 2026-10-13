@@ -21,10 +21,17 @@
 // fills schema defaults into accepted results (ElicitResult.WithDefaults) —
 // this handler still applies defaults so scripted/interactive content is
 // complete before validation.
+//
+// Cancellation: Console.ReadLine() can't be cancelled, and a thread left
+// blocked in it would swallow the next line typed for a later prompt. So one
+// background reader pumps stdin lines into a channel, and a prompt awaits the
+// channel with the caller's token (deadline and/or user cancel). A cancelled
+// wait consumes nothing, so an abandoned prompt can't steal later input.
 
 using ModelContextProtocol.Protocol;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 
 public static partial class InputHandler
 {
@@ -36,8 +43,31 @@ public static partial class InputHandler
             ? new Queue<JsonElement>(JsonSerializer.Deserialize<JsonElement[]>(raw)!)
             : null;
 
-    public static ValueTask<ElicitResult> HandleElicitationAsync(ElicitRequestParams request)
+    private static readonly Lazy<ChannelReader<string?>> StdinLines = new(() =>
     {
+        var channel = Channel.CreateUnbounded<string?>();
+        _ = Task.Run(async () =>
+        {
+            while (await Console.In.ReadLineAsync() is { } line)
+            {
+                channel.Writer.TryWrite(line);
+            }
+            channel.Writer.TryWrite(null); // EOF
+        });
+        return channel.Reader;
+    });
+
+    /// <summary>A cancellable Console.ReadLine: the next stdin line, or null at EOF.</summary>
+    private static async Task<string?> PromptAsync(string text, CancellationToken cancel)
+    {
+        Console.Write(text);
+        return await StdinLines.Value.ReadAsync(cancel);
+    }
+
+    public static ValueTask<ElicitResult> HandleElicitationAsync(
+        ElicitRequestParams request, CancellationToken cancel = default)
+    {
+        cancel.ThrowIfCancellationRequested();
         if (request.Mode == "url")
         {
             // URL mode: display the full URL, never pre-fetch, never auto-navigate.
@@ -64,7 +94,7 @@ public static partial class InputHandler
         {
             return ValueTask.FromResult(NextScriptedAnswer(request));
         }
-        return ValueTask.FromResult(RenderForm(request));
+        return new ValueTask<ElicitResult>(RenderFormAsync(request, cancel));
     }
 
     // -----------------------------------------------------------------------
@@ -259,7 +289,7 @@ public static partial class InputHandler
         }
     }
 
-    private static ElicitResult RenderForm(ElicitRequestParams request)
+    private static async Task<ElicitResult> RenderFormAsync(ElicitRequestParams request, CancellationToken cancel)
     {
         Console.WriteLine($"\n{request.Message}");
         Console.WriteLine("(enter a value, or !decline / !cancel; blank accepts the default)");
@@ -282,8 +312,7 @@ public static partial class InputHandler
             var hints = def is { } d ? $"{options}, default: {d}" : options;
             for (; ; )
             {
-                Console.Write($"  {label} ({hints}): ");
-                var raw = (Console.ReadLine() ?? "!cancel").Trim();
+                var raw = (await PromptAsync($"  {label} ({hints}): ", cancel) ?? "!cancel").Trim();
                 if (raw == "!decline") return new ElicitResult { Action = "decline" };
                 if (raw == "!cancel") return new ElicitResult { Action = "cancel" };
                 if (raw.Length == 0)

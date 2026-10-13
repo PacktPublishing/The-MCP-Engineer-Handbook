@@ -1,6 +1,10 @@
 // The manual gather-and-retry loop from Chapter 6, Section 6.2.5, plus the
-// production bounds the chapter calls for (retry budget, timeout, cancel) —
-// expressed at the WIRE level, over a raw ITransport.
+// production bounds the chapter calls for — expressed at the WIRE level, over
+// a raw ITransport. The round budget plays the part of the printed snippet's
+// cap. One deadline covers the whole flow, every round trip AND the time a
+// user spends answering a form: a timer-based CancellationTokenSource (it runs
+// on a monotonic clock) linked to the user's cancel token, passed to both the
+// network calls and the input handler.
 //
 // Why not over McpClient? In the 2.0.0 SDK the MRTR loop is welded into
 // McpClientImpl.SendRequestAsync: every request auto-fulfils input_required
@@ -30,10 +34,24 @@ public static class ManualLoop
         string toolName,
         JsonObject arguments,
         int maxRounds,           // retry budget
-        TimeSpan timeout,        // deadline for the whole flow, all rounds included
+        TimeSpan timeout,        // deadline for the whole flow: every round trip and every prompt
         CancellationToken cancel) // user-facing cancel (Ctrl+C)
     {
-        var deadline = DateTime.UtcNow + timeout;
+        using var deadline = new CancellationTokenSource(timeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancel, deadline.Token);
+        try
+        {
+            return await GatherAsync(session, toolName, arguments, maxRounds, linked.Token);
+        }
+        catch (OperationCanceledException) when (deadline.IsCancellationRequested && !cancel.IsCancellationRequested)
+        {
+            throw new TimeoutException($"tool call still gathering input after {timeout.TotalMilliseconds} ms");
+        }
+    }
+
+    private static async Task<CallToolResult> GatherAsync(
+        ITransport session, string toolName, JsonObject arguments, int maxRounds, CancellationToken token)
+    {
         JsonObject mrtr = [];
         for (var round = 1; ; round++)
         {
@@ -41,10 +59,7 @@ public static class ManualLoop
             {
                 throw new McpException($"input_required retry budget exhausted after {maxRounds} rounds");
             }
-            if (DateTime.UtcNow >= deadline)
-            {
-                throw new TimeoutException($"tool call still gathering input after {timeout.TotalMilliseconds} ms");
-            }
+            token.ThrowIfCancellationRequested();
 
             // Each iteration is a brand-new request with a new JSON-RPC id,
             // carrying the original params plus the gathered responses.
@@ -58,7 +73,7 @@ public static class ManualLoop
             {
                 params_[key] = value?.DeepClone();
             }
-            var response = await SendAsync(session, "tools/call", params_, deadline, cancel);
+            var response = await SendAsync(session, "tools/call", params_, token);
 
             // On the wire the discriminator is `resultType: "input_required"`.
             if (response is not JsonObject obj
@@ -83,7 +98,7 @@ public static class ManualLoop
                 }
                 // Render a form, open a URL, or apply policy — see InputHandler.cs.
                 inputResponses[key] = InputResponse.FromElicitResult(
-                    await InputHandler.HandleElicitationAsync(elicit));
+                    await InputHandler.HandleElicitationAsync(elicit, token));
             }
             mrtr = new JsonObject
             {
@@ -99,16 +114,14 @@ public static class ManualLoop
 
     /// <summary>One JSON-RPC request/response exchange over the raw transport.</summary>
     private static async Task<JsonNode?> SendAsync(
-        ITransport session, string method, JsonObject params_, DateTime deadline, CancellationToken cancel)
+        ITransport session, string method, JsonObject params_, CancellationToken token)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancel);
-        cts.CancelAfter(deadline - DateTime.UtcNow);
         var id = new RequestId(Interlocked.Increment(ref _nextId));
         await session.SendMessageAsync(
-            new JsonRpcRequest { Id = id, Method = method, Params = params_ }, cts.Token);
+            new JsonRpcRequest { Id = id, Method = method, Params = params_ }, token);
         while (true)
         {
-            var message = await session.MessageReader.ReadAsync(cts.Token);
+            var message = await session.MessageReader.ReadAsync(token);
             switch (message)
             {
                 case JsonRpcResponse response when response.Id == id:

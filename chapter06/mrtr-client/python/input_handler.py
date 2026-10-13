@@ -15,10 +15,21 @@
 #     Example: MRTR_ANSWERS='[{"title":"Sync","duration":"30"},{"confirm":true}]'
 #
 # MRTR_POLICY=autoconfirm enables the demo auto-answer policy.
+#
+# Cancellation: prompts are cancellable. One daemon thread reads stdin into a
+# queue, and a prompt polls that queue from the event loop. Cancelling the
+# caller's scope (deadline or user cancel) simply stops the poll, so an
+# abandoned prompt leaves no worker blocked in input() that would swallow the
+# next line. (A bare `anyio.to_thread.run_sync(input)` is the trap here: by
+# default cancellation waits for the thread, and abandoning the thread leaves
+# it reading.)
 
 import json
 import os
+import queue
 import re
+import sys
+import threading
 from typing import Any
 
 import anyio
@@ -165,7 +176,35 @@ def _parse_input(prop: dict[str, Any], raw: str) -> tuple[bool, Any]:
     return False, None
 
 
-def _render_form_sync(params: ElicitRequestFormParams) -> ElicitResult:
+_lines: "queue.Queue[str | None]" = queue.Queue()
+_reader: threading.Thread | None = None
+
+
+def _read_stdin() -> None:
+    for line in sys.stdin:
+        _lines.put(line)
+    _lines.put(None)  # EOF
+
+
+async def _prompt(text: str) -> str:
+    """A cancellable input(): waits for the next stdin line without blocking the loop."""
+    global _reader
+    if _reader is None:
+        _reader = threading.Thread(target=_read_stdin, daemon=True)
+        _reader.start()
+    print(text, end="", flush=True)
+    while True:
+        try:
+            line = _lines.get_nowait()
+        except queue.Empty:
+            await anyio.sleep(0.05)  # cancellation point
+            continue
+        if line is None:
+            raise EOFError("stdin closed")
+        return line.rstrip("\n")
+
+
+async def _render_form(params: ElicitRequestFormParams) -> ElicitResult:
     print(f"\n{params.message}")
     print("(enter a value, or !decline / !cancel; blank accepts the default)")
     content: dict[str, Any] = {}
@@ -180,7 +219,7 @@ def _render_form_sync(params: ElicitRequestFormParams) -> ElicitResult:
         if "default" in prop:
             hints.append(f"default: {prop['default']}")
         while True:
-            raw = input(f"  {label} ({', '.join(hints)}): ").strip()
+            raw = (await _prompt(f"  {label} ({', '.join(hints)}): ")).strip()
             if raw == "!decline":
                 return ElicitResult(action="decline")
             if raw == "!cancel":
@@ -231,8 +270,7 @@ async def handle_elicitation(params: ElicitRequestParams) -> ElicitResult:
 
     if _scripted_answers is not None:
         return next_scripted_answer(params)
-    # input() blocks; keep the event loop responsive.
-    return await anyio.to_thread.run_sync(_render_form_sync, params)
+    return await _render_form(params)
 
 
 async def handle_input_request(request: InputRequest) -> ElicitResult:
