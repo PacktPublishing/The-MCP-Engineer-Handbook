@@ -12,7 +12,7 @@ Versions are pinned exactly. C# and Python are on the 2.0.0 GA. TypeScript moved
 | Python | `mcp` | `2.0.0` |
 | TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` (`@modelcontextprotocol/node` 2.1.0 for the Node HTTP adapter in `chapter01/http-server`) | `2.2.0` |
 
-Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. Two deliberate exceptions ride the v1 `mcp`/`sdk` line because their extension ecosystems have not adopted v2: `chapter07/health-dashboard` (ext-apps) and `chapter12/agent-as-mcp` (Microsoft Agent Framework) — see their READMEs.
+Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. One deliberate exception rides the v1 `mcp` line because its ecosystem has not adopted v2: `chapter12/agent-as-mcp` (Microsoft Agent Framework) — see its README. (`chapter07/health-dashboard` was the other until ext-apps 2.x added v2 support.)
 
 ## Layout
 
@@ -46,7 +46,7 @@ templates/hello-server/   walking skeleton in all three languages (toolchain che
 | `chapter06/schema-mapping/` | §6.2.2/§6.2.3 | TS (canonical), C#, Python |
 | `chapter06/mrtr-client/` | §6.2.5 | TS (canonical), C#, Python |
 | `chapter06/task-injection/` | §6.2.11 | C# (canonical), Python, TS |
-| `chapter07/health-dashboard/` | §7.4 | TS only (Apps SDK; v1 SDK + ext-apps 1.7.5) |
+| `chapter07/health-dashboard/` | §7.4 | TS only (Apps SDK; ext-apps 2.0.3) |
 | `chapter07/tasks-polling/` | §7.3 | C# (client-side task methods, minimal) |
 | `chapter09/token-validation/` | §9.2.2/§9.2.4/§9.2.7 | C# (canonical) |
 | `chapter09/stepup-client/` | §9.7.4 | C# (union rule + naive anti-pattern) |

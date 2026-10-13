@@ -2,13 +2,14 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import {
   registerAppTool,
   registerAppResource,
   RESOURCE_MIME_TYPE,
 } from "@modelcontextprotocol/ext-apps/server";
+import { z } from "zod";
 
 // The View bundle is produced by `npm run build` (esbuild) and inlined into
 // the HTML template here, so the ui:// resource is a single self-contained
@@ -71,7 +72,7 @@ function createServer(): McpServer {
     {
       title: "System Health",
       description: "Returns current health status for all services.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       _meta: { ui: { resourceUri } },
     },
     async () => {
@@ -96,7 +97,7 @@ function createServer(): McpServer {
     {
       title: "Refresh Health Data",
       description: "Fetches latest health data for the dashboard.",
-      inputSchema: {},
+      inputSchema: z.object({}),
       _meta: {
         ui: {
           resourceUri,
@@ -131,5 +132,6 @@ function createServer(): McpServer {
   return server;
 }
 
-const server = createServer();
-await server.connect(new StdioServerTransport());
+// serveStdio serves both eras: modern (2026-07-28) openings get a modern
+// instance, legacy `initialize` openings a legacy one.
+serveStdio(createServer);
