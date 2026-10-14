@@ -1,4 +1,4 @@
-// Demonstrates the Chapter 2, Section 2 work-around: when the model API you bind
+// Demonstrates the Chapter 2, Section 2.2.2 work-around: when the model API you bind
 // tools to has no native outputSchema support, serialize the tool's output schema
 // into the description you hand to the model. The server itself is untouched —
 // McpClientTool.WithDescription only changes the client-side presentation.
@@ -25,7 +25,7 @@ foreach (var tool in tools)
 }
 
 // Pick a tool that declares an output schema and lift that schema into the
-// description. This is the one-liner from Chapter 2, Section 2:
+// description. This is the one-liner from Chapter 2, Section 2.2.2:
 var statusTool = tools.First(t => t.ReturnJsonSchema is not null);
 
 var patchedTool = statusTool.WithDescription(

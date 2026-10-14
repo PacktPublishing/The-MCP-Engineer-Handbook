@@ -1,7 +1,7 @@
 {
   "name": "long-running-operation",
   "version": "0.1.0",
-  "description": "Long-running operations split across start/status tools (Chapter 2, §6.4)",
+  "description": "Long-running operations split across start/status tools (Chapter 2, Section 2.6.4)",
   "type": "module",
   "scripts": {
     "build": "tsc",

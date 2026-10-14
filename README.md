@@ -32,7 +32,7 @@ templates/hello-server/   walking skeleton in all three languages (toolchain che
 | `chapter01/stdio-server/` | §1.7 | C# (canonical), Python, TS |
 | `chapter01/http-server/` | §1.7–1.8 | C# (canonical), Python, TS |
 | `chapter01/client/` | §1.8 | C# only (by design; Ollama-wired, LLM API alternatives included) |
-| `chapter02/long-running-operation/` | ch2 §6.4 | C# (canonical), Python, TS |
+| `chapter02/long-running-operation/` | §2.6.4 | C# (canonical), Python, TS |
 | `chapter03/demo-resource-server/` | shared by ch3 samples | C# (canonical), Python, TS |
 | `chapter03/resource-client-host/` | §3.3.1 | C# (canonical), Python, TS |
 | `chapter03/model-resource-client/` | §3.3.3 | C# (canonical), Python, TS |
