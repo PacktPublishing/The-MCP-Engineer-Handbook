@@ -109,10 +109,7 @@ The TS client spawns `demo-resource-server/typescript/dist/server.js` as a stdio
 
 ## Deviations from the printed extracts
 
-Written against `ModelContextProtocol` 2.0.0:
-
-- `IMcpClient` does not exist in 2.0.0 — the parameter is typed `McpClient` (a concrete class; its only interface is `IAsyncDisposable`).
-- `read.Contents.Select(c => c.ToContentBlock())` does not compile: there is no `ToContentBlock()` on `ResourceContents`. The conversion goes through Microsoft.Extensions.AI, `c.ToAIContent().ToContentBlock()` (text contents → `TextContentBlock`, blobs → image/audio blocks by MIME type).
+Written against `ModelContextProtocol` 2.0.0, the C# extract matches the sample: the parameter is typed `McpClient` (a concrete class at 2.0.0; there is no `IMcpClient`), and the contents-to-block conversion goes through Microsoft.Extensions.AI, `c.ToAIContent().ToContentBlock()` (text contents → `TextContentBlock`, blobs → image/audio blocks by MIME type), because `ResourceContents` has no `ToContentBlock()` of its own.
 
 Python (`mcp` 2.0.0):
 

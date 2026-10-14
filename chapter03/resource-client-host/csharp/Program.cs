@@ -75,14 +75,14 @@ var resource = hostile ? resourceList[0] : resourceList.First(r => r.Name == "us
 // and keep the snapshot they approved. Every approach below injects and attests exactly
 // this read. Reading again would inject bytes nobody approved: if a host must re-read,
 // it compares ContentDigest with the approved one and asks again when it differs.
-var approved = await client.ReadResourceAsync(resource.Uri);
-var approvedDigest = ContentDigest(approved);
-var resourceContent = approved.Contents.OfType<TextResourceContents>().First();
+var approvedRead = await client.ReadResourceAsync(resource.Uri);
+var approvedDigest = ContentDigest(approvedRead);
+var resourceContent = approvedRead.Contents.OfType<TextResourceContents>().First();
 Console.WriteLine($"--- Preview (user approves before injection) ---");
 Console.WriteLine($"  {resource.Uri}  [{resource.MimeType}]  \"{resource.Title}\"");
 Console.WriteLine($"  {resource.Description}");
 Console.WriteLine($"  {Truncate(resourceContent.Text ?? "", 120)}");
-Console.WriteLine($"  approved snapshot: {approved.Contents.Count} item(s), sha256 {approvedDigest}");
+Console.WriteLine($"  approved snapshot: {approvedRead.Contents.Count} item(s), sha256 {approvedDigest}");
 Console.WriteLine();
 
 const string BaseSystemPrompt = "You are the Nimbus Notes in-app assistant. Be concise.";
@@ -131,7 +131,7 @@ foreach (var approach in approaches)
             // to shape system-level context, and with user approval.
             systemMessage.Contents.Add(new TextContent("<mcp_resource>"));
             systemMessage.Contents.Add(new TextContent("<uri>" + Xml.Escape(resource.Uri) + "</uri>"));
-            foreach (var c in ToEscapedAIContents(approved)) // book: Contents.AddRange(...) — see README
+            foreach (var c in ToEscapedAIContents(approvedRead)) // book: ToAIContents(), unescaped for brevity — see README
             {
                 injected.Add(c);
                 systemMessage.Contents.Add(c);
@@ -144,12 +144,12 @@ foreach (var approach in approaches)
         {
             // §3.3.1 — the hybrid: a trusted system-level ATTESTATION states the
             // provenance of the contents that ride in the user message.
-            var attestationData = CreateAttestation(approved);
+            var attestationData = CreateAttestation(approvedRead);
             systemMessage.Contents.Add(attestationData.GetSystemContent());
 
             userMessage.Contents.Add(new TextContent("<mcp_resource>"));
             userMessage.Contents.Add(attestationData.GetUserContent());
-            foreach (var c in ToEscapedAIContents(approved)) // book: Contents.AddRange(...) — see README
+            foreach (var c in ToEscapedAIContents(approvedRead)) // book: ToAIContents(), unescaped for brevity — see README
             {
                 injected.Add(c);
                 userMessage.Contents.Add(c);

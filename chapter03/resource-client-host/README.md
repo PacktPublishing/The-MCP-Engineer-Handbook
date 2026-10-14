@@ -81,9 +81,6 @@ The TS host spawns `demo-resource-server/typescript/dist/server.js` as a stdio c
 
 ## Deviations from the printed extracts
 
-Written against `ModelContextProtocol` 2.0.0:
+Written against `ModelContextProtocol` 2.0.0, the system and hybrid extracts match the sample: both inject `approvedRead`, the read the user previewed and approved, and convert its contents with the SDK's `ToAIContents()` in a loop. The one deliberate difference is escaping. The book leaves it out of the listings for brevity (and says so); the sample escapes every server-supplied value it places inside the host's tags (`Xml.Escape`, and `ToEscapedAIContents` in place of `ToAIContents`).
 
-- `systemMessage.Contents.AddRange(resourceReadResult.Contents)` (and the same line on `userMessage` in the hybrid) does not compile: `ChatMessage.Contents` is an `IList<AIContent>` (no `AddRange`), and read contents are `ResourceContents`, not `AIContent`. The sample converts with the SDK's `ToAIContents()` and adds in a loop.
-- The system and hybrid extracts read the resource again; the sample injects the approved preview read (`approved`) instead, and escapes every server-supplied value it places inside the host's tags (`Xml.Escape`, and `ToEscapedAIContents` in place of `ToAIContents`).
-
-TypeScript (`@modelcontextprotocol/client` 2.2.0): the C# `AddRange` problem has no TS counterpart (the chat abstraction is a plain part list), but the conversion step remains — read contents are not message parts, so `host.ts` maps them in `toParts`, discriminating text from blob structurally (`'text' in c`).
+TypeScript (`@modelcontextprotocol/client` 2.2.0): the chat abstraction is a plain part list, but the conversion step `ToAIContents()` does in C# remains — read contents are not message parts, so `host.ts` maps them in `toParts`, discriminating text from blob structurally (`'text' in c`).

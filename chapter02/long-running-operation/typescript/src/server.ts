@@ -1,8 +1,10 @@
-// LongRunningOperation — splitting a slow domain operation across tools (Chapter 2, §6.4).
+// LongRunningOperation — splitting a slow domain operation across tools (Chapter 2, Section 2.6.4).
 //
 // start_data_processing and start_search return immediately with an operation ID; the
 // model threads that ID through check_operation_status and can recover lost IDs with
 // list_all_operations. Completion is derived from the clock — no background workers.
+
+import { randomBytes } from 'node:crypto';
 
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
@@ -10,8 +12,8 @@ import { z } from 'zod';
 
 // How long a started operation takes before it is "done".
 // Scaled down for the demo; the tool descriptions below are scaled to match.
-const completionDelayMs =
-  1000 * (Number.parseFloat(process.env.OPERATION_DELAY_SECONDS ?? '') || 4);
+const delaySeconds = Number.parseFloat(process.env.OPERATION_DELAY_SECONDS ?? '');
+const completionDelayMs = 1000 * (Number.isFinite(delaySeconds) ? delaySeconds : 4);
 
 interface Operation {
   operationId: string;
@@ -31,37 +33,73 @@ const isCompleted = (op: Operation) => Date.now() >= op.completesAt;
 // here, so the state is shared even if serveStdio pins separate era instances.)
 const operations = new Map<string, Operation>();
 
+// Bounded retention, applied lazily on each call (still no background workers):
+// completed operations expire 10 minutes after they finish, and the store never
+// holds more than 1,000 operations. Without a bound, a long-lived server grows
+// forever and eventually runs out of IDs.
+const retentionMs = 10 * 60 * 1000;
+const maxOperations = 1000;
+const maxIdAttempts = 8;
+
+// Drops operations that completed more than retentionMs ago.
+function prune(): void {
+  const cutoff = Date.now() - retentionMs;
+  for (const op of [...operations.values()]) {
+    if (op.completesAt <= cutoff) operations.delete(op.operationId);
+  }
+}
+
 function startOperation(kind: string, input: string, resultTemplate: string): Operation {
+  prune();
+  if (operations.size >= maxOperations) {
+    // Still full: make room by dropping the oldest completed operation.
+    // If every operation is still running, refuse and say what to do instead.
+    const completed = [...operations.values()].filter(isCompleted);
+    if (completed.length === 0) {
+      throw new Error(
+        `This server is already running ${maxOperations} operations, its limit. ` +
+          'Check on them with check_operation_status (list_all_operations shows them all) ' +
+          'and start new work once some have completed.',
+      );
+    }
+    const oldest = completed.reduce((a, b) => (b.completesAt < a.completesAt ? b : a));
+    operations.delete(oldest.operationId);
+  }
+
   // Short, distinctive handles: the model has to reproduce them verbatim,
-  // so op_3f9c beats a 36-character UUID (Chapter 2, Section 6.3).
-  while (true) {
+  // so op_3f9c1a2b beats a 36-character UUID (Chapter 2, Section 2.6.3).
+  // Eight hex characters from a CSPRNG make collisions vanishingly rare at
+  // the cap above, and the retry loop is bounded anyway.
+  for (let attempt = 0; attempt < maxIdAttempts; attempt++) {
+    const operationId = `op_${randomBytes(4).toString('hex')}`;
+    if (operations.has(operationId)) continue;
     const op: Operation = {
-      operationId: `op_${Math.floor(Math.random() * 0x10000)
-        .toString(16)
-        .padStart(4, '0')}`,
+      operationId,
       kind,
       input,
       startedAt: Date.now(),
       completesAt: Date.now() + completionDelayMs,
       result: resultTemplate,
     };
-    if (!operations.has(op.operationId)) {
-      operations.set(op.operationId, op);
-      return op;
-    }
+    operations.set(operationId, op);
+    return op;
   }
+
+  throw new Error('Could not allocate an operation ID. Try again.');
 }
 
 const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] });
 
 // Status report returned by check_operation_status (also published as the tool's
-// output schema).
+// output schema). result and guidance are always present and null when absent, the
+// same contract as the C# and Python ports (an omitted field and a null one are
+// different contracts to a client that validates).
 const OperationStatusSchema = z.object({
   operationId: z.string(),
   kind: z.string(),
   status: z.string(),
-  result: z.string().optional(),
-  guidance: z.string().optional(),
+  result: z.string().nullable(),
+  guidance: z.string().nullable(),
 });
 
 serveStdio(() => {
@@ -135,6 +173,7 @@ serveStdio(() => {
       outputSchema: OperationStatusSchema,
     },
     async ({ operationId }) => {
+      prune();
       const op = operations.get(operationId);
       let status: z.infer<typeof OperationStatusSchema>;
       if (op === undefined) {
@@ -144,18 +183,27 @@ serveStdio(() => {
           operationId,
           kind: 'unknown',
           status: 'not_found',
+          result: null,
           guidance:
-            `No operation with ID '${operationId}' exists on this server. Operation IDs ` +
-            'are returned by start_data_processing and start_search. Call ' +
-            'list_all_operations to see every operation this server knows about.',
+            `No operation with ID '${operationId}' exists on this server; completed ` +
+            'operations expire after 10 minutes. Operation IDs are returned by ' +
+            'start_data_processing and start_search. Call list_all_operations to ' +
+            'see every operation this server knows about.',
         };
       } else if (isCompleted(op)) {
-        status = { operationId: op.operationId, kind: op.kind, status: 'completed', result: op.result };
+        status = {
+          operationId: op.operationId,
+          kind: op.kind,
+          status: 'completed',
+          result: op.result,
+          guidance: null,
+        };
       } else {
         status = {
           operationId: op.operationId,
           kind: op.kind,
           status: 'running',
+          result: null,
           guidance: 'Still running. Wait at least 2 seconds before checking again.',
         };
       }
@@ -176,9 +224,11 @@ serveStdio(() => {
       inputSchema: z.object({}),
     },
     async () => {
+      prune();
       if (operations.size === 0) {
         return text(
-          'No operations have been started yet. Start one with start_data_processing or start_search.',
+          'No operations right now; completed operations expire after 10 minutes. ' +
+            'Start one with start_data_processing or start_search.',
         );
       }
       const lines = [...operations.values()]

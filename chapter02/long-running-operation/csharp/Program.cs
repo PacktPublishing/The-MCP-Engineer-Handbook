@@ -1,10 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
-using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -48,7 +50,16 @@ public class OperationTools
     // durable storage (a database or task queue): the stateless design rules from
     // Chapter 5 mean any replica may receive the status poll, so the state must
     // live somewhere every replica can reach — not in process memory.
-    private static readonly ConcurrentDictionary<string, Operation> Operations = new();
+    private static readonly Dictionary<string, Operation> Operations = new();
+    private static readonly Lock Gate = new();
+
+    // Bounded retention, applied lazily on each call (still no background workers):
+    // completed operations expire 10 minutes after they finish, and the store never
+    // holds more than 1,000 operations. Without a bound, a long-lived server grows
+    // forever and eventually runs out of IDs.
+    private static readonly TimeSpan Retention = TimeSpan.FromMinutes(10);
+    private const int MaxOperations = 1000;
+    private const int MaxIdAttempts = 8;
 
     [McpServerTool(Name = "start_data_processing"),
      Description("Start an asynchronous data-processing job on the named dataset. " +
@@ -88,14 +99,22 @@ public class OperationTools
     public static OperationStatus CheckOperationStatus(
         [Description("Operation ID returned by start_data_processing or start_search.")] string operationId)
     {
-        if (!Operations.TryGetValue(operationId, out var op))
+        Operation? op;
+        lock (Gate)
+        {
+            Prune();
+            Operations.TryGetValue(operationId, out op);
+        }
+
+        if (op is null)
         {
             // Instructive text for unknown handles: tell the model how to recover,
             // not just that it failed.
             return new OperationStatus(operationId, "unknown", "not_found", Result: null,
-                Guidance: $"No operation with ID '{operationId}' exists on this server. Operation IDs " +
-                          "are returned by start_data_processing and start_search. Call " +
-                          "list_all_operations to see every operation this server knows about.");
+                Guidance: $"No operation with ID '{operationId}' exists on this server; completed " +
+                          "operations expire after 10 minutes. Operation IDs are returned by " +
+                          "start_data_processing and start_search. Call list_all_operations to " +
+                          "see every operation this server knows about.");
         }
 
         return op.IsCompleted
@@ -110,34 +129,75 @@ public class OperationTools
         "of running and completed operations.")]
     public static string ListAllOperations()
     {
-        if (Operations.IsEmpty)
+        List<Operation> operations;
+        lock (Gate)
         {
-            return "No operations have been started yet. Start one with start_data_processing or start_search.";
+            Prune();
+            operations = [.. Operations.Values.OrderBy(o => o.StartedAt)];
         }
 
-        var lines = Operations.Values
-            .OrderBy(o => o.StartedAt)
+        if (operations.Count == 0)
+        {
+            return "No operations right now; completed operations expire after 10 minutes. " +
+                   "Start one with start_data_processing or start_search.";
+        }
+
+        var lines = operations
             .Select(o => $"{o.OperationId}  kind={o.Kind}  status={(o.IsCompleted ? "completed" : "running")}  input='{o.Input}'");
         return string.Join('\n', lines);
     }
 
     private static Operation StartOperation(string kind, string input, string resultTemplate)
     {
-        // Short, distinctive handles: the model has to reproduce them verbatim,
-        // so op_3f9c beats a 36-character UUID (Chapter 2, Section 6.3).
-        while (true)
+        lock (Gate)
         {
-            var op = new Operation(
-                OperationId: $"op_{Random.Shared.Next(0x10000):x4}",
-                Kind: kind,
-                Input: input,
-                StartedAt: DateTimeOffset.UtcNow,
-                CompletesAt: DateTimeOffset.UtcNow + CompletionDelay,
-                Result: resultTemplate);
-            if (Operations.TryAdd(op.OperationId, op))
+            Prune();
+            if (Operations.Count >= MaxOperations)
             {
+                // Still full: make room by dropping the oldest completed operation.
+                // If every operation is still running, refuse and say what to do instead.
+                var oldest = Operations.Values.Where(o => o.IsCompleted).MinBy(o => o.CompletesAt)
+                    ?? throw new McpException(
+                        $"This server is already running {MaxOperations} operations, its limit. " +
+                        "Check on them with check_operation_status (list_all_operations shows them all) " +
+                        "and start new work once some have completed.");
+                Operations.Remove(oldest.OperationId);
+            }
+
+            // Short, distinctive handles: the model has to reproduce them verbatim,
+            // so op_3f9c1a2b beats a 36-character UUID (Chapter 2, Section 2.6.3).
+            // Eight hex characters from a CSPRNG make collisions vanishingly rare at
+            // the cap above, and the retry loop is bounded anyway.
+            for (var attempt = 0; attempt < MaxIdAttempts; attempt++)
+            {
+                var operationId = $"op_{RandomNumberGenerator.GetHexString(8, lowercase: true)}";
+                if (Operations.ContainsKey(operationId))
+                {
+                    continue;
+                }
+
+                var op = new Operation(
+                    OperationId: operationId,
+                    Kind: kind,
+                    Input: input,
+                    StartedAt: DateTimeOffset.UtcNow,
+                    CompletesAt: DateTimeOffset.UtcNow + CompletionDelay,
+                    Result: resultTemplate);
+                Operations.Add(operationId, op);
                 return op;
             }
+
+            throw new McpException("Could not allocate an operation ID. Try again.");
+        }
+    }
+
+    // Drops operations that completed more than Retention ago. Callers hold Gate.
+    private static void Prune()
+    {
+        var cutoff = DateTimeOffset.UtcNow - Retention;
+        foreach (var expired in Operations.Values.Where(o => o.CompletesAt <= cutoff).ToList())
+        {
+            Operations.Remove(expired.OperationId);
         }
     }
 }
@@ -151,5 +211,13 @@ public sealed record Operation(
 }
 
 /// <summary>Status report returned by check_operation_status (also published as the tool's output schema).</summary>
+/// <remarks>
+/// The generated output schema marks every member required, but the SDK serializes with
+/// WhenWritingNull, which would omit a null Result or Guidance and break the schema.
+/// JsonIgnoreCondition.Never keeps them on the wire as null: always present, null when
+/// absent, the same contract as the Python and TypeScript ports.
+/// </remarks>
 public sealed record OperationStatus(
-    string OperationId, string Kind, string Status, string? Result, string? Guidance);
+    string OperationId, string Kind, string Status,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Result,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Guidance);
