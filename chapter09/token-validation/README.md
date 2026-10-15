@@ -3,7 +3,8 @@
 Companion sample for **Section 9.2, "OAuth 2.1 — The Standard Path"** —
 specifically the Resource Server obligations: RFC 8707 audience binding
 (Section 9.2.4), RFC 9728 protected resource metadata and `WWW-Authenticate`
-discovery (Section 9.2.2), and per-tool scope enforcement (Section 9.2.7).
+discovery (Section 9.2.2), and per-tool scope enforcement with the
+`insufficient_scope` challenge that drives step-up (Sections 9.2.7 and 9.7.4).
 The middleware embodies the token passthrough prohibition (Section 9.2.8):
 **validate, don't forward** — every rejection below is a check a passthrough
 server never makes.
@@ -16,12 +17,18 @@ ladder demonstrates one obligation:
 |---|---|---|
 | No / invalid token | `401` + `WWW-Authenticate: Bearer ... resource_metadata="..."` | The discovery chain's first link (§9.2.2): the challenge points at the RFC 9728 metadata document, which points at the Authorization Server |
 | Genuine token, wrong `aud` | `401`, "this is a token for a different resource" | RFC 8707 audience binding (§9.2.4): the signature proves the token is genuine; only the audience check proves it's *yours* |
-| Right `aud`, missing scope | In-band tool error naming the missing scope | Per-tool scope policy (§9.2.7), via the C# SDK's request-filter pipeline (§5.4.2); the error is model-readable so an agent knows which scope a re-authorization needs |
+| Right `aud`, missing scope | `403` + `WWW-Authenticate: Bearer error="insufficient_scope", scope="...", resource_metadata="..."` | Per-tool scope policy (§9.2.7) and the step-up trigger (§9.7.4): the `scope` parameter names everything the tool needs, in one challenge |
 | Right `aud`, right scope | Tool result | — |
 
-Scope failures come back as `isError: true` tool results rather than HTTP
-401s deliberately: the token *is* valid for this server, the request just
-exceeds it, and the model benefits from reading why.
+A scope failure is a `403`, not a `401`: the token *is* valid for this
+server, the request just exceeds it. The middleware reads the tool name from
+the `Mcp-Name` header, which the `2026-07-28` revision requires alongside
+`Mcp-Method`; the SDK rejects any request whose headers disagree with its
+JSON-RPC body, so the header is safe to route on without parsing the body.
+A `tools/call` filter in the C# SDK's request-filter pipeline (§5.4.2)
+enforces the same policy as defense in depth, for requests on older protocol
+versions that carry no checked headers; there the failure is an in-band
+`isError: true` tool result naming the required scopes.
 
 ## The demo issuer is not an Authorization Server
 
@@ -32,7 +39,8 @@ tokens come from a real Authorization Server (Keycloak, Auth0, Okta, an
 enterprise IdP), and validation uses that AS's published signing keys via
 standard JWT bearer middleware (`AddAuthentication().AddJwtBearer(...)` in
 ASP.NET Core). Nothing else in the sample changes — the audience check, the
-scope filter, and the metadata document are the parts you keep.
+scope checks (the `403` challenge and the filter behind it), and the metadata
+document are the parts you keep.
 
 `ModelContextProtocol.AspNetCore` 2.0.0 also ships production
 wiring for two of the three layers shown hand-rolled here:
@@ -125,16 +133,23 @@ curl -s http://localhost:5309/mcp -X POST \
 ```
 
 **4. Right audience, insufficient scope — `delete_report` with a read-only
-token (same curl shape, `Mcp-Name: delete_report`). Successful calls come
-back as a one-event SSE stream:**
+token (same curl shape with `-si` to show headers, and `delete_report` in
+both `Mcp-Name` and the body):**
 
 ```
-event: message
-data: {"result":{"content":[{"type":"text","text":"Insufficient scope for 'delete_report': the token grants [reports:read] but this tool requires 'reports:admin'. Re-authorize with the missing scope."}],"isError":true,"resultType":"complete","_meta":{...}},"id":3,"jsonrpc":"2.0"}
+HTTP/1.1 403 Forbidden
+WWW-Authenticate: Bearer error="insufficient_scope", scope="reports:admin", resource_metadata="http://localhost:5309/.well-known/oauth-protected-resource/mcp"
+
+{"error":"insufficient_scope","error_description":"'delete_report' requires [reports:admin]; the token grants [reports:read]."}
 ```
 
-**5. Full scope — mint with `--scopes "reports:read reports:admin"` and the
-same call succeeds:**
+The same read-only token still calls `read_report` successfully.
+
+**5. Full scope — a step-up client would now re-authorize for the union of
+what it requested before and what the challenge names, `reports:read
+reports:admin`. Mint that with `--scopes "reports:read reports:admin"` and
+the same call succeeds. Successful calls come back as a one-event SSE
+stream:**
 
 ```
 event: message

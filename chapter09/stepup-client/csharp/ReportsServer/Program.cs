@@ -15,6 +15,8 @@ using ModelContextProtocol.Server;
 // ---------------------------------------------------------------------------
 
 const string ServerUrl = "http://localhost:5302";
+const string AuthServerUrl = "http://localhost:5301";
+const string ResourceMetadataUrl = $"{ServerUrl}/.well-known/oauth-protected-resource";
 const string SharedSecret = "stepup-demo-hmac-secret--demo-only-never-do-this-in-production"; // must match FakeAuthServer
 
 // The server owns this map; clients learn it through challenges, not documentation.
@@ -35,8 +37,25 @@ builder.Services
 
 var app = builder.Build();
 
+// RFC 9728 protected resource metadata for a resource at the root (Section 9.2.2).
+// Both challenges below point here. scopes_supported lists only the minimal
+// scope for basic use; the rest is requested through step-up.
+app.MapGet("/.well-known/oauth-protected-resource", () => Results.Json(new
+{
+    resource = ServerUrl,
+    authorization_servers = new[] { AuthServerUrl },
+    scopes_supported = new[] { "reports:read" },
+    bearer_methods_supported = new[] { "header" },
+}));
+
 app.Use(async (context, next) =>
 {
+    if (context.Request.Path.StartsWithSegments("/.well-known"))
+    {
+        await next();
+        return;
+    }
+
     // 1. Every request needs a valid token bound to this server (aud check, Section 9.2.4).
     var authorization = context.Request.Headers.Authorization.ToString();
     var claims = authorization.StartsWith("Bearer ")
@@ -45,7 +64,8 @@ app.Use(async (context, next) =>
     if (claims is null || claims.Value.GetProperty("aud").GetString() != ServerUrl)
     {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        context.Response.Headers.WWWAuthenticate = "Bearer error=\"invalid_token\"";
+        context.Response.Headers.WWWAuthenticate =
+            $"Bearer error=\"invalid_token\", resource_metadata=\"{ResourceMetadataUrl}\"";
         return;
     }
 
@@ -55,8 +75,10 @@ app.Use(async (context, next) =>
     // 2. tools/call requests are additionally checked against the tool's scopes.
     //    The tool name lives in the JSON-RPC body, so peek at it before the MCP
     //    endpoint runs (EnableBuffering lets the endpoint re-read the stream).
+    //    On 2026-07-28 the Mcp-Name header carries it too (the token-validation
+    //    sample routes on that); the body works for every protocol version.
     if (HttpMethods.IsPost(context.Request.Method)
-        && PeekToolName(context.Request) is { } toolName
+        && await PeekToolNameAsync(context.Request) is { } toolName
         && requiredScopes.TryGetValue(toolName, out var required)
         && !required.All(granted.Contains))
     {
@@ -70,7 +92,7 @@ app.Use(async (context, next) =>
         context.Response.Headers.WWWAuthenticate =
             $"Bearer error=\"insufficient_scope\", " +
             $"error_description=\"{toolName} requires scopes the token does not carry\", " +
-            $"scope=\"{scope}\"";
+            $"scope=\"{scope}\", resource_metadata=\"{ResourceMetadataUrl}\"";
         return;
     }
 
@@ -82,12 +104,12 @@ app.MapMcp();
 Console.WriteLine($"[reports]  MCP server listening on {ServerUrl}");
 app.Run();
 
-static string? PeekToolName(HttpRequest request)
+static async Task<string?> PeekToolNameAsync(HttpRequest request)
 {
     request.EnableBuffering();
     string body;
     using (var reader = new StreamReader(request.Body, leaveOpen: true))
-        body = reader.ReadToEndAsync().GetAwaiter().GetResult();
+        body = await reader.ReadToEndAsync(request.HttpContext.RequestAborted);
     request.Body.Position = 0;
 
     try
