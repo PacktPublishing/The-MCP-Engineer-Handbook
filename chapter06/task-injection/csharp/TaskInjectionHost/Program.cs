@@ -1,9 +1,9 @@
 // TaskInjectionHost — the model integration problem for long-running operations (§6.2.11).
 //
-// Chat-model APIs require every tool call to be immediately followed by its result, so when
+// Most chat-model APIs require every tool call to be immediately followed by its result, so when
 // an operation outlives the model turn the host synthesizes an immediate "started" result to
 // unblock the model. When the REAL result arrives later, it has nowhere natural to go. This
-// host demonstrates the four known injection strategies side by side and prints the exact
+// host demonstrates the four common injection strategies side by side and prints the exact
 // conversation-history shape each one produces.
 //
 // Usage: dotnet run -- [prepend|synthetic-turn|meta-tool|fresh-invocation|--all]
@@ -80,7 +80,7 @@ static async Task<(string, int, string)> RunScenarioAsync(string strategy)
     var history = new List<ChatMessage> { new(ChatRole.User, "Please generate the quarterly sales report.") };
 
     // Act 1 — the model calls start_report; the tool returns IMMEDIATELY with a handle. That
-    // immediate "operation started" tool result is what keeps the conversation legal: the API
+    // immediate "operation started" tool result is what keeps the conversation legal: most APIs
     // would reject a history in which the tool call dangles unanswered. The model acknowledges
     // and the turn ends — with the real work still running.
     string? operationId = null;
