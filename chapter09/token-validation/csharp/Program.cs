@@ -45,12 +45,13 @@ if (args.Length > 0 && args[0] == "make-token")
 
 // --- The MCP server ---------------------------------------------------------
 
-// Tool name -> scope the token must carry. Enforced by the tools/call filter.
-var requiredScopes = new Dictionary<string, string>
+// Tool name -> every scope the token must carry for that tool. Enforced at the
+// HTTP layer by the middleware below, and again by the tools/call filter.
+var requiredScopes = new Dictionary<string, string[]>
 {
-    ["list_reports"] = "reports:read",
-    ["read_report"] = "reports:read",
-    ["delete_report"] = "reports:admin",
+    ["list_reports"] = ["reports:read"],
+    ["read_report"] = ["reports:read"],
+    ["delete_report"] = ["reports:admin"],
 };
 
 var builder = WebApplication.CreateBuilder(args);
@@ -68,11 +69,13 @@ builder.Services
     .WithTools<ReportTools>()
     .WithRequestFilters(filters =>
     {
-        // Scope enforcement per tool. The HTTP middleware below has already
+        // Defense in depth behind the middleware's 403. A 2026-07-28 request
+        // never reaches this point with too few scopes, but a request on an
+        // older protocol version carries no Mcp-Name header the SDK checks
+        // against the body, so the per-tool policy is enforced here as well,
+        // on the tool the SDK actually dispatched. The middleware has already
         // authenticated the token; the ASP.NET Core transport flows the
-        // resulting ClaimsPrincipal to request.User. Failures come back as
-        // in-band tool errors so the model can read WHY it was denied and
-        // which scope a re-authorization needs.
+        // resulting ClaimsPrincipal to request.User.
         filters.AddCallToolFilter(next => async (request, cancellationToken) =>
         {
             var toolName = request.MatchedPrimitive?.Id ?? "unknown";
@@ -81,7 +84,7 @@ builder.Services
                 // OAuth convention: one space-delimited `scope` claim.
                 var granted = request.User?.FindFirst("scope")?.Value?.Split(' ')
                     ?? [];
-                if (!granted.Contains(required))
+                if (!required.All(granted.Contains))
                 {
                     return new CallToolResult
                     {
@@ -89,7 +92,8 @@ builder.Services
                         {
                             Text = $"Insufficient scope for '{toolName}': the token grants " +
                                    $"[{string.Join(", ", granted)}] but this tool requires " +
-                                   $"'{required}'. Re-authorize with the missing scope.",
+                                   $"[{string.Join(", ", required)}]. Re-authorize for the " +
+                                   $"required scopes together with the scopes already requested.",
                         }],
                         IsError = true,
                     };
@@ -103,7 +107,8 @@ var app = builder.Build();
 
 // RFC 9728 protected resource metadata, at the path-aware well-known location
 // for a resource at /mcp. This is the first stop of the discovery chain: the
-// 401 below points here, and this document points at the Authorization Server.
+// 401 and 403 challenges below point here, and this document points at the
+// Authorization Server.
 app.MapGet("/.well-known/oauth-protected-resource/mcp", () => Results.Json(new
 {
     resource = CanonicalResourceUri,
@@ -126,7 +131,7 @@ app.Use(async (context, nextMiddleware) =>
     var authorization = context.Request.Headers.Authorization.ToString();
     if (!authorization.StartsWith("Bearer ", StringComparison.Ordinal))
     {
-        await Reject(context, "invalid_request", "No bearer token was provided.");
+        await Unauthorized(context, "invalid_request", "No bearer token was provided.");
         return;
     }
 
@@ -142,7 +147,7 @@ app.Use(async (context, nextMiddleware) =>
         });
     if (!result.IsValid)
     {
-        await Reject(context, "invalid_token",
+        await Unauthorized(context, "invalid_token",
             "The token is malformed, expired, or not signed by a trusted issuer.");
         return;
     }
@@ -156,11 +161,34 @@ app.Use(async (context, nextMiddleware) =>
     var token = (JsonWebToken)result.SecurityToken;
     if (!token.Audiences.Contains(CanonicalResourceUri))
     {
-        await Reject(context, "invalid_token",
+        await Unauthorized(context, "invalid_token",
             $"Token audience is '{string.Join(" ", token.Audiences)}' — this is a token " +
             $"for a different resource. This server only accepts tokens minted for " +
             $"'{CanonicalResourceUri}' (RFC 8707 resource indicator).");
         return;
+    }
+
+    // Per-tool scope policy (Section 9.7.4). The token is valid for this
+    // server; the request just exceeds it, so the answer is a 403
+    // insufficient_scope challenge naming everything the tool needs, which
+    // a step-up client unions with what it already requested. The 2026-07-28
+    // revision requires Mcp-Method and Mcp-Name headers that mirror the
+    // JSON-RPC body, and the SDK rejects a request whose headers and body
+    // disagree, so the middleware can read the tool name without parsing the
+    // body. (Non-ASCII names arrive Base64-wrapped; DecodeValue unwraps them.)
+    if (context.Request.Headers["Mcp-Method"].ToString().Trim() == "tools/call"
+        && McpHeaderEncoder.DecodeValue(context.Request.Headers["Mcp-Name"].ToString().Trim())
+            is { } toolName
+        && requiredScopes.TryGetValue(toolName, out var required))
+    {
+        var granted = result.ClaimsIdentity.FindFirst("scope")?.Value?.Split(' ') ?? [];
+        if (!required.All(granted.Contains))
+        {
+            await InsufficientScope(context, required,
+                $"'{toolName}' requires [{string.Join(", ", required)}]; the token grants " +
+                $"[{string.Join(", ", granted)}].");
+            return;
+        }
     }
 
     context.User = new ClaimsPrincipal(result.ClaimsIdentity);
@@ -174,10 +202,23 @@ app.Run("http://localhost:5309");
 // 401 with the WWW-Authenticate header RFC 9728 prescribes: the
 // resource_metadata parameter hands the client the start of the discovery
 // chain (Section 9.2.2). The JSON body repeats the reason for humans.
-static async Task Reject(HttpContext context, string error, string description)
+static async Task Unauthorized(HttpContext context, string error, string description)
 {
     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
     context.Response.Headers.WWWAuthenticate =
         $"Bearer error=\"{error}\", resource_metadata=\"{ResourceMetadataUri}\"";
     await context.Response.WriteAsJsonAsync(new { error, error_description = description });
+}
+
+// 403 with the RFC 6750 insufficient_scope challenge: the scope parameter
+// names ALL the scopes the operation needs, in one challenge, and
+// resource_metadata matches the 401 (Section 9.7.4).
+static async Task InsufficientScope(HttpContext context, string[] required, string description)
+{
+    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+    context.Response.Headers.WWWAuthenticate =
+        $"Bearer error=\"insufficient_scope\", scope=\"{string.Join(' ', required)}\", " +
+        $"resource_metadata=\"{ResourceMetadataUri}\"";
+    await context.Response.WriteAsJsonAsync(
+        new { error = "insufficient_scope", error_description = description });
 }

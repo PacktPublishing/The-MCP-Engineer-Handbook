@@ -13,10 +13,16 @@ using System.Text.Json;
 // It tracks nothing between requests. Scope accumulation across step-ups is
 // deliberately the CLIENT's job (Section 9.7.4): neither the AS nor the MCP
 // server remembers what was granted before.
+//
+// --deny <scope> simulates a user who unchecks that scope on the consent
+// screen: the grant comes back narrower than the request, and the token
+// response's scope field says so (RFC 6749 Section 5.1).
 // ---------------------------------------------------------------------------
 
 const string Issuer = "http://localhost:5301";
 const string SharedSecret = "stepup-demo-hmac-secret--demo-only-never-do-this-in-production";
+
+var denied = args.SkipWhile(a => a != "--deny").Skip(1).FirstOrDefault();
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls(Issuer);
@@ -26,7 +32,9 @@ var app = builder.Build();
 app.MapPost("/token", async (HttpRequest request) =>
 {
     var form = await request.ReadFormAsync();
-    var scope = form["scope"].ToString();
+    var scope = string.Join(' ', form["scope"].ToString()
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Where(s => s != denied));
     var resource = form["resource"].ToString(); // RFC 8707 resource indicator -> aud claim
 
     var payload = JsonSerializer.Serialize(new
@@ -47,7 +55,8 @@ app.MapPost("/token", async (HttpRequest request) =>
     });
 });
 
-Console.WriteLine($"[fake-as]  listening on {Issuer}/token");
+Console.WriteLine($"[fake-as]  listening on {Issuer}/token" +
+                  (denied is null ? "" : $" (denying \"{denied}\")"));
 app.Run();
 
 // Demo-only HMAC-signed JWT. A real AS signs with an asymmetric key and
