@@ -12,7 +12,7 @@ Versions are pinned exactly. C# and Python are on the 2.0.0 GA. TypeScript moved
 | Python | `mcp` | `2.0.0` |
 | TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` (`@modelcontextprotocol/node` 2.1.0 for the Node HTTP adapter in `chapter01/http-server`) | `2.2.0` |
 
-Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. One deliberate exception rides the v1 `mcp` line because its ecosystem has not adopted v2: `chapter12/agent-as-mcp` (Microsoft Agent Framework) — see its README. (`chapter07/health-dashboard` was the other until ext-apps 2.x added v2 support.)
+Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. One sample temporarily pins a dependency to git rather than PyPI: `chapter12/agent-as-mcp` uses a Microsoft Agent Framework commit with mcp 2.x support until a release ships it — see its README. (It and `chapter07/health-dashboard` used to ride the v1 `mcp` line until their ecosystems adopted v2.)
 
 ## Layout
 
@@ -54,7 +54,7 @@ templates/hello-server/   walking skeleton in all three languages (toolchain che
 | `chapter10/otel-wiring/` | §10.2 | C# only (by design) |
 | `chapter10/mcp-proxy/` | §10.4.3/§10.5 | C# (canonical) |
 | `chapter12/channel-pattern/` | §12.4 (+§12.2 harness miniature) | C# (canonical; server + chat surface + harness) |
-| `chapter12/agent-as-mcp/` | §12.3 | Python only (MAF `as_mcp_server()`; rides mcp v1 via MAF pin — see its README) |
+| `chapter12/agent-as-mcp/` | §12.3 | Python only (MAF `as_mcp_server()`; MAF pinned to a git commit for mcp 2.x — see its README) |
 | `templates/hello-server`, `templates/hello-client` | — | toolchain skeletons |
 
 ## SDK behavior notes (verified at GA, 2026-08-19)

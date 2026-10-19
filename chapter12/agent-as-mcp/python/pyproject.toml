@@ -2,10 +2,16 @@
 name = "agent-as-mcp"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["agent-framework==1.14.0"]
+dependencies = [
+    "agent-framework-core",
+    "agent-framework-openai",
+    "mcp==2.3.0",
+]
 
-# Still required at the repo's GA pass: agent-framework's own dependency tree pins
-# pre-release subpackages (e.g. azure-ai-agentserver-responses>=1.0.0b5) — this is
-# unrelated to the beta-era mcp pin the other samples dropped.
-[tool.uv]
-prerelease = "allow"
+# TEMPORARY git pin: agent-framework 1.22.0 (latest on PyPI) still requires mcp<2.
+# MAF main moved to mcp>=2.2.0,<3 in PR #9236 (merge commit below). Replace these
+# sources with a plain PyPI pin (e.g. "agent-framework-core==1.23.0") once a release
+# ships with mcp 2.x.
+[tool.uv.sources]
+agent-framework-core = { git = "https://github.com/microsoft/agent-framework", rev = "28e9844556c4524096299b35597abb1cb2f3eb4c", subdirectory = "python/packages/core" }
+agent-framework-openai = { git = "https://github.com/microsoft/agent-framework", rev = "28e9844556c4524096299b35597abb1cb2f3eb4c", subdirectory = "python/packages/openai" }
