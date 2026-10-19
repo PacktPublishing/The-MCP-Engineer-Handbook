@@ -1,7 +1,8 @@
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 
 // A deterministic IChatClient so the harness runs without a model. It behaves like a
-// minimal channel-aware assistant: every user message gets exactly one reply-tool call,
+// minimal channel-aware assistant: every inbound batch gets exactly one reply-tool call,
 // then a plain-text turn to end the loop. Swap in a real model via OPENAI_API_KEY.
 sealed class ScriptedChatClient : IChatClient
 {
@@ -19,10 +20,13 @@ sealed class ScriptedChatClient : IChatClient
         if (last.Contents.OfType<FunctionResultContent>().Any())
             return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Replied.")));
 
-        var userText = list.Last(m => m.Role == ChatRole.User).Text;
-        var replyText = userText.Contains("time", StringComparison.OrdinalIgnoreCase)
+        // The user turn is the harness's JSON batch: {"messages":[{"id","from","text"}]}.
+        var batch = JsonSerializer.Deserialize<JsonElement>(list.Last(m => m.Role == ChatRole.User).Text);
+        var texts = batch.GetProperty("messages").EnumerateArray()
+            .Select(m => m.GetProperty("text").GetString() ?? "").ToList();
+        var replyText = texts.Any(t => t.Contains("time", StringComparison.OrdinalIgnoreCase))
             ? $"It is {DateTime.Now:HH:mm} here. (scripted responder)"
-            : $"You said: \"{userText.Split(':', 2)[^1].Trim()}\" (scripted responder)";
+            : $"You said: {string.Join(" / ", texts.Select(t => $"\"{t}\""))} (scripted responder)";
 
         var call = new FunctionCallContent($"call_{++_callId}", "reply",
             new Dictionary<string, object?> { ["text"] = replyText });

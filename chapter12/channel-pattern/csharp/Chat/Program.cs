@@ -4,8 +4,14 @@ using System.Text.Json;
 // It knows nothing about MCP: it appends your messages to the inbox file and prints
 // whatever the agent's reply tool wrote to the outbox file.
 
-var dir = Environment.GetEnvironmentVariable("CHANNEL_DIR")
-          ?? Path.Combine(Path.GetTempPath(), "mcp-channel-demo");
+// One private directory per conversation: no shared default. Use the same CHANNEL_DIR
+// as ChannelHost (which prints the one it created if you didn't set it).
+var dir = Environment.GetEnvironmentVariable("CHANNEL_DIR");
+if (string.IsNullOrEmpty(dir))
+{
+    Console.Error.WriteLine("CHANNEL_DIR is not set: export CHANNEL_DIR=$(mktemp -d), same value as ChannelHost.");
+    return 1;
+}
 Directory.CreateDirectory(dir);
 var inbox = Path.Combine(dir, "inbox.jsonl");
 var outbox = Path.Combine(dir, "outbox.jsonl");
@@ -41,3 +47,5 @@ while (true)
     File.AppendAllText(inbox,
         JsonSerializer.Serialize(new { from = "user", text = line, ts = DateTime.UtcNow }) + Environment.NewLine);
 }
+
+return 0;

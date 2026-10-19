@@ -2,8 +2,9 @@
 
 Microsoft Agent Framework's `as_mcp_server()` turns any agent into an MCP server
 exposing the agent as a single tool (name and description come from the agent).
-Any MCP host — an IDE, a chat platform, another framework's harness — can now call
-this agent without knowing or caring what framework it's built on.
+Any compatible MCP host — an IDE, a chat platform, another framework's harness — can
+now call this agent without knowing or caring what framework it's built on. (MAF pins
+the v1 `mcp` SDK, so the server speaks the 2025-era revision; see the README.)
 
 Model: OpenAI via OPENAI_API_KEY (and optionally OPENAI_MODEL). Listing the tool
 needs no model; calling it does.
