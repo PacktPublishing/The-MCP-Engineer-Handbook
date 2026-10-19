@@ -3,6 +3,13 @@
 // the model used the surface) or Outcome (was the answer actually right — properties that
 // need real data). Rung-1 mock mode (§10.1.4) runs the behavioral checks only: with
 // fabricated results there is no "right answer" to check against.
+//
+// The outcome checks are a demonstration of outcome scoring, not a production scorer: a
+// pattern match can't tell "30 days for annual plans" from "Invoices are payable within
+// 30 days." Real evals extract a structured answer and compare it to the expected value, or
+// grade against a rubric.
+
+using System.Text.RegularExpressions;
 
 enum CheckKind { Behavioral, Outcome }
 
@@ -17,10 +24,19 @@ sealed class Transcript
     public List<ToolCallRecord> ToolCalls { get; } = [];
     public string FinalAnswer { get; set; } = "";
     public int ModelTurns { get; set; }
+    public string Termination { get; set; } = "turn_budget"; // or "final_answer"
 }
 
 static class Checks
 {
+    // Applied to every task in every mode, ahead of the task's own checks.
+    public static IReadOnlyList<Check> Common => [Completed()];
+
+    // A run that ran out of turns, or ended on an empty reply, fails whatever else it did.
+    public static Check Completed() => new(
+        "gave a final answer", CheckKind.Behavioral,
+        t => t.Termination == "final_answer" && !string.IsNullOrWhiteSpace(t.FinalAnswer));
+
     public static Check ToolCalled(string name) => new(
         $"called {name}", CheckKind.Behavioral,
         t => t.ToolCalls.Any(c => c.Name == name));
@@ -51,9 +67,22 @@ static class Checks
              t.ToolCalls.FindLastIndex(c => c.IsError) < t.ToolCalls.Count - 1 &&
              t.FinalAnswer.Length > 0);
 
+    // Bounded match: "3 documents" must not match inside "13 documents", and a negated
+    // mention ("not 30 days") doesn't count as stating the value.
     public static Check AnswerContains(string text) => new(
         $"answer contains \"{text}\"", CheckKind.Outcome,
-        t => t.FinalAnswer.Contains(text, StringComparison.OrdinalIgnoreCase));
+        t => Mentions(t.FinalAnswer, text, countNegated: false));
+
+    // The competing wrong value: an answer that mentions it at all hedges or contradicts
+    // itself, so any bounded mention fails, negated or not.
+    public static Check AnswerOmits(string text) => new(
+        $"answer omits \"{text}\"", CheckKind.Outcome,
+        t => !Mentions(t.FinalAnswer, text, countNegated: true));
+
+    private static bool Mentions(string answer, string text, bool countNegated) =>
+        Regex.IsMatch(answer,
+            (countNegated ? "" : @"(?<!\bnot\s+)") + @"(?<!\d)" + Regex.Escape(text) + @"(?!\d)",
+            RegexOptions.IgnoreCase);
 }
 
 static class EvalCorpus
@@ -70,12 +99,13 @@ static class EvalCorpus
 
         // The dud task (§10.1.2). Keyword search ranks the deprecated 2024 FAQ above the
         // current policy, and a model that reads the first hit answers "60 days" — every
-        // call valid, no errors, a confident answer. Only the outcome check catches it.
+        // call valid, no errors, a confident answer. Only the outcome checks catch it.
         new("refund-window-annual",
             "What is the refund window for annual plans?",
             [
                 Checks.ToolCalled("search_documents"),
                 Checks.AnswerContains("30 days"),
+                Checks.AnswerOmits("60 days"),
             ]),
 
         // The flaky task. The scripted model only sometimes reaches for count_documents

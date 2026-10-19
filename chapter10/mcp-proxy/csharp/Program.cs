@@ -2,8 +2,16 @@
 // SDK: the routable headers of the 2026-07-28 revision (Mcp-Method, Mcp-Name)
 // carry everything the proxy routes on, so JSON-RPC bodies stream through
 // unparsed. (Section 10.4.3)
+//
+// That holds only for the 2026-07-28 revision, where the upstream must reject a
+// request whose headers disagree with its body. Legacy-era requests carry no
+// verified headers, so a body-only tools/call would slip past the routing table
+// and the budget. This proxy admits 2026-07-28 traffic only; legacy clients go
+// through a compatibility shim (Section 10.3.1), not through this door.
 using System.Collections.Concurrent;
 using System.Text.Json;
+
+const string SupportedVersion = "2026-07-28";
 
 // Routing table: tool-name prefix -> upstream pool. Everything else — other
 // tools, discovery, every non-tools/call method — takes the default upstream.
@@ -21,11 +29,32 @@ var app = WebApplication.CreateBuilder(args).Build();
 
 app.Map("/{**path}", async (HttpContext ctx) =>
 {
+    // Version gate first: no routing or budget decision on unverified headers.
+    var version = ctx.Request.Headers["MCP-Protocol-Version"].FirstOrDefault();
+    if (version != SupportedVersion)
+    {
+        app.Logger.LogInformation("rejected: MCP-Protocol-Version={Version}", version ?? "(none)");
+        ctx.Response.StatusCode = StatusCodes.Status400BadRequest;
+        await ctx.Response.WriteAsJsonAsync(new
+        {
+            jsonrpc = "2.0",
+            id = await ReadIdAsync(ctx),
+            error = new
+            {
+                code = -32022, // UnsupportedProtocolVersionError
+                message = "Unsupported protocol version",
+                data = new { supported = new[] { SupportedVersion }, requested = version ?? "" },
+            },
+        });
+        return;
+    }
+
     var method = ctx.Request.Headers["Mcp-Method"].FirstOrDefault() ?? "";
     var name = ctx.Request.Headers["Mcp-Name"].FirstOrDefault() ?? "";
-    var principal = ctx.Request.Headers["X-Principal"].FirstOrDefault()
-                 ?? ctx.Request.Headers.Authorization.FirstOrDefault()
-                 ?? "anonymous";
+    // Demo stand-in for an identity your authenticating front end resolves and
+    // asserts. Never key or log on a raw credential: Authorization is forwarded
+    // upstream untouched, and never read here.
+    var principal = ctx.Request.Headers["X-Principal"].FirstOrDefault() ?? "anonymous";
 
     // Route on headers alone. Only tool calls consult the prefix table.
     var upstream = method == "tools/call"
@@ -52,25 +81,13 @@ app.Map("/{**path}", async (HttpContext ctx) =>
 
     if (remaining < 0)
     {
-        // The only place the proxy opens the envelope: a JSON-RPC error must
-        // echo the request id. One well-specified envelope, parsed only on
-        // the rejection path.
-        object? id = null;
-        try
-        {
-            using var doc = await JsonDocument.ParseAsync(ctx.Request.Body,
-                cancellationToken: ctx.RequestAborted);
-            if (doc.RootElement.TryGetProperty("id", out var i)) id = i.Clone();
-        }
-        catch (JsonException) { }
-
         var retryAfter = 60 - (int)(DateTimeOffset.UtcNow.ToUnixTimeSeconds() % 60);
         ctx.Response.StatusCode = StatusCodes.Status429TooManyRequests;   // for SDKs
         ctx.Response.Headers.RetryAfter = retryAfter.ToString();
         await ctx.Response.WriteAsJsonAsync(new                           // for the model
         {
             jsonrpc = "2.0",
-            id,
+            id = await ReadIdAsync(ctx),
             error = new
             {
                 code = -32000,
@@ -105,3 +122,20 @@ app.Map("/{**path}", async (HttpContext ctx) =>
 });
 
 app.Run();
+
+// The only place the proxy opens the envelope: a JSON-RPC error must echo the
+// request id. One well-specified envelope, parsed only on the rejection paths.
+static async Task<object?> ReadIdAsync(HttpContext ctx)
+{
+    try
+    {
+        using var doc = await JsonDocument.ParseAsync(ctx.Request.Body,
+            cancellationToken: ctx.RequestAborted);
+        // A batch array or a bare value has no single id to echo.
+        if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+            doc.RootElement.TryGetProperty("id", out var id))
+            return id.Clone();
+    }
+    catch (JsonException) { }
+    return null;
+}
