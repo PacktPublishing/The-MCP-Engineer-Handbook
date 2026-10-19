@@ -54,5 +54,9 @@ curl "${H[@]}" -H 'Mcp-Method: tools/call' -H 'Mcp-Name: get_document' -H 'X-Pri
 echo "--- bob: unaffected"
 curl "${H[@]}" -H 'Mcp-Method: tools/call' -H 'Mcp-Name: get_document' -H 'X-Principal: bob' -d "$CALL" $P -o /dev/null -w "bob: HTTP %{http_code}\n"
 
+echo "--- legacy request (no MCP-Protocol-Version): rejected before routing or budget"
+curl -s -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+  -H 'X-Principal: bob' -d "$CALL" $P -w "\nHTTP %{http_code}\n"
+
 echo; echo "--- proxy log (one line per request, at the seam)"
 grep -A1 'info: McpProxy' "$LOGDIR/proxy.log" | grep -v '^--' | paste - - | sed 's/info: McpProxy\[0\][[:space:]]*//'

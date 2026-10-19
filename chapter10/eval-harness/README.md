@@ -36,7 +36,7 @@ The pieces: `WithStreamServerTransport(Stream, Stream)` (hosting extension; or `
 
 ```
 csharp/DocsServer/    the server under test: fixture corpus + three tools; also runs standalone over stdio
-csharp/EvalHarness/   the harness: in-process wiring, task corpus, scripted IChatClient, N-run scoring, --mock
+csharp/EvalHarness/   the harness: in-process wiring, task corpus, scripted IChatClient, N-run scoring, --mock, --dump
 typescript/           minimal counterpart: server + client over InMemoryTransport.createLinkedPair, one task
 ```
 
@@ -50,12 +50,31 @@ Both C# hosts register `DocsTools` with a `tools/list` filter (`ToolOrder.cs`) t
 cd csharp/EvalHarness
 dotnet run                # real server, in-process; full report
 dotnet run -- --mock      # rung-1 mock mode
-dotnet run -- --runs 20   # change N (default 5)
+dotnet run -- --runs 20   # change N (default 5; 1 to 100)
+dotnet run -- --dump out  # also write each run's model-visible context to out/<task>-run<N>.json
 ```
 
-By default the model is a deterministic scripted `IChatClient` (no API key needed) that plays a mid-tier tool-calling model — including reading the first search hit for the refund task (the dud) and only reaching for `count_documents` on even run indices (the flaky task, standing in for the marginal-context variance N-run scoring exists to surface). Expected report: `refund-window-annual` at 0% flagged as DUD, `count-billing-docs` at 60%, everything else at 100%; exit code 1 whenever any run failed (CI-gate semantics).
+By default the model is a deterministic scripted `IChatClient` (no API key needed) that plays a mid-tier tool-calling model — including reading the first search hit for the refund task (the dud) and only reaching for `count_documents` on even run indices (the flaky task, standing in for the marginal-context variance N-run scoring exists to surface). Expected report: `refund-window-annual` at 0% flagged as DUD, `count-billing-docs` at 60%, everything else at 100% (23/30 runs); exit code 1 whenever any run failed (CI-gate semantics), and 2 for a bad command line (`--runs` must be a whole number from 1 to 100).
 
-Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, default `gpt-4.1-mini`) to run the same corpus against a real model through the same `IChatClient` seam — gpt-4.1-mini reads past the deprecated FAQ and scores 30/30, which is itself the point: pass rates are a property of (context × model), not of the server alone.
+Every task also gets a behavioral `gave a final answer` check, in every mode: a run that ends on an empty reply, or runs out of its eight-turn budget, fails. A tool call the server rejects with a JSON-RPC error (a hallucinated tool name, for instance) goes back to the model as a failed tool result, the way a host would report it, so one bad call fails a run rather than aborting the matrix. The harness doesn't put deadlines on model or tool calls; a real one would give each a timeout, since the turn budget doesn't bound the time spent inside one call.
+
+Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`, default `gpt-4.1-mini`) to run the same corpus against a real model through the same `IChatClient` seam. In my runs, gpt-4.1-mini read past the deprecated FAQ and scored 30/30. That is one anecdote rather than a benchmark, but it makes the point: pass rates are a property of (context × model), not of the server alone.
+
+### What the numbers mean
+
+- **The default pass rates show harness mechanics, not model performance.** The scripted model follows programmed branches and ignores the tool descriptions, so editing a description doesn't move its score. Only a real model measures context quality.
+- **The outcome checks demonstrate outcome scoring; they are not a production scorer.** They are bounded pattern matches: `3 documents` doesn't match inside `13 documents`, a negated mention (`not 30 days`) doesn't count, and the refund task also fails any answer that mentions the dud's `60 days`. Pattern matching still can't read meaning, though: "Invoices are payable within 30 days." passes the refund task, and so does the right number attached to the wrong plan. Real evals extract a structured answer and compare it to the expected value, or grade against a rubric.
+
+### `--dump`: the transcript the model saw (§10.1.5)
+
+The report scores a summary of each run (tool calls, final answer, turn count). With `--dump <dir>`, each run also writes `<dir>/<task>-run<N>.json` with what the model was actually given and did:
+
+- `tools`: the tool surface as handed to the `IChatClient` (name, description, input schema)
+- `messages`: the full history (the prompt, every assistant message and tool call, every tool result, the final answer); the harness sends no system prompt
+- `model` and `responseModelId` (the exact model version a real provider reports), and `options` (only the fields that are set; the harness sets none)
+- `modelTurns`, and `termination`: `final_answer` or `turn_budget`
+
+Each file is a few kilobytes, serialized with MEAI's `AIJsonUtilities.DefaultOptions`.
 
 ### `--mock`: rung 1 of the mocking spectrum (§10.1.4)
 
@@ -69,7 +88,7 @@ npm install && npm run build
 node dist/eval.js
 ```
 
-Prints the pass rate for one eval task (the dud task, 0/3) over the linked in-memory pair.
+Prints the pass rate for one eval task (the dud task, 0/3) over the linked in-memory pair. It's an API demonstration, not a gate, but its exit code still reflects the result: 0 only if every run passed, so this one exits 1.
 
 ## Smoke test (stdio server standalone)
 

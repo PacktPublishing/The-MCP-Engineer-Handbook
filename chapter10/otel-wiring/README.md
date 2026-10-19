@@ -2,7 +2,7 @@
 
 Companion sample for **Section 10.2, "Observability"** — the registration
 snippet for Section 10.2.2, the error-ladder emission point from Section
-10.2.5, the token-cost histograms from Section 10.2.6, and the trace-context
+10.2.5, the cost histograms from Section 10.2.6, and the trace-context
 behavior from Section 10.2.3, all in one ASP.NET Core HTTP MCP server.
 
 This sample is deliberately C#-only: the chapter uses the C# SDK as its OTel
@@ -63,15 +63,34 @@ are present; on stdio, `_meta` is the only carrier there is.
 `Program.cs` registers two request filters (the Chapter 5 Section 5.4.2
 pattern — one MCP-aware emission point):
 
-- A `tools/call` filter stamping `mcp.error_rung` on the SDK's span:
-  `protocol` (`McpProtocolException` — unknown tool, invalid params),
-  `tool_error` (the tool ran and failed), `dud_suspect` (technical success,
-  logical miss — here, an empty search result), `ok`. Note the SDK converts
-  a throwing tool into `isError: true` *outside* the filter pipeline, so
-  inside a filter that case is an exception, not a result.
-- Histograms `mcp.tool_result.tokens_estimate` (chars/4, tagged by tool
-  name) and `mcp.tools_list.tokens_estimate` — the cost signature you log
-  when you can't log the content.
+- A `tools/call` filter stamping each call's rung on the error ladder:
+  `protocol` (`McpProtocolException`: the call never reached a tool, for
+  example an unknown tool name), `tool_error` (the tool ran and failed, or
+  its arguments didn't bind), `dud_suspect` (technical success, logical
+  miss — here, an empty search result), `ok`. Invalid arguments
+  (`"days":"many"`, a missing `query`) land on `tool_error`, not `protocol`:
+  the SDK reports them as `isError: true` results, which is where the spec
+  puts input-validation errors. Note the SDK converts a throwing tool into
+  `isError: true` *outside* the filter pipeline, so inside a filter that
+  case is an exception, not a result.
+- The filter records the rung twice: as the `mcp.error_rung` attribute on
+  the SDK's span, and on a counter, `mcp.tool.calls`, dimensioned by
+  `mcp.tool.name` and `mcp.error_rung`. Span attributes don't become
+  metrics, and sampled traces undercount, so the counter is what gives you
+  per-rung rates, `dud_suspect` included (the SDK's own
+  `mcp.server.operation.duration` already carries `error.type` for
+  protocol and tool errors, but nothing for duds). Unregistered tool names
+  are recorded as `unknown`, so callers can't mint new time series.
+- Histograms `mcp.tool_result.tokens_estimate` (tagged by tool name) and
+  `mcp.tools_list.tokens_estimate`: the cost signature you log when you
+  can't log the content. Despite the names, no tokenizer runs here. The
+  value is a rough character-volume index, UTF-16 characters divided by
+  four, over the result's text blocks (or the tools' names, descriptions,
+  and input schemas). It stands in for the token-length histogram Section
+  10.2.6 recommends. For a real deployment, count tokens with one named
+  reference tokenizer over what the model actually receives, and still read
+  the numbers as an index: the distribution and its drift matter, not the
+  third significant digit.
 
 ## Run
 
@@ -113,8 +132,24 @@ body with `Mcp-Name: check_dependency` / `"name":"check_dependency",
 `mcp.error_rung: protocol` — unknown tool, JSON-RPC `-32602`:
 `Mcp-Name: no_such_tool` / `"arguments":{}`.
 
+`mcp.error_rung: tool_error` again, from arguments that don't bind:
+`Mcp-Name: get_forecast` / `"arguments":{"city":"Oslo","days":"many"}`
+comes back as `isError: true`, not as a protocol error.
+
 Each call prints a `tools/call <name>` span from source
 `Experimental.ModelContextProtocol` with the matching `mcp.error_rung` tag.
+The next metrics export prints `mcp.tool.calls` from meter
+`OtelWiring.Sample`, one point per tool and rung (excerpt):
+
+```
+Metric Name: mcp.tool.calls, Description: tools/call requests by tool and error-ladder rung (mcp.error_rung)., Unit: {call}, Metric Type: LongSum
+(...] mcp.error_rung: ok mcp.tool.name: get_forecast
+Value: 1
+(...] mcp.error_rung: dud_suspect mcp.tool.name: search_incidents
+Value: 1
+(...] mcp.error_rung: protocol mcp.tool.name: unknown
+Value: 1
+```
 To see the stitching behavior, add `-H 'traceparent:
 00-11111111111111111111111111111111-aaaaaaaaaaaaaaaa-01'` and/or a
 `"traceparent"` key inside `_meta`, and compare `Activity.TraceId` /

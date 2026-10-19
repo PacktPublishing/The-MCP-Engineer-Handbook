@@ -62,7 +62,7 @@ await client.connect(clientTransport);
 
 // --- One eval task, run N times and scored as a pass rate. The scripted "model" reads the
 // first search hit — a plausible weak-model policy that produces a dud: every call valid,
-// a confident answer, and the outcome check ("cites 30 days") catches it.
+// a confident answer, and the outcome check (states 30 days, not the dud's 60) catches it.
 const RUNS = 3;
 const text = (r: Awaited<ReturnType<typeof client.callTool>>) =>
   (r.content as Array<{ type: string; text: string }>)[0].text;
@@ -73,7 +73,7 @@ for (let run = 0; run < RUNS; run++) {
   const firstId = JSON.parse(text(search)).matches[0].id as string;
   const read = await client.callTool({ name: 'read_document', arguments: { id: firstId } });
   const answer = `According to '${firstId}': ${JSON.parse(text(read)).body}`;
-  if (answer.includes('30 days')) passed++;
+  if (/(?<!\d)30 days/.test(answer) && !/(?<!\d)60 days/.test(answer)) passed++;
 }
 
 console.log('task: refund-window-annual');
@@ -83,3 +83,4 @@ if (passed < RUNS)
 
 await client.close();
 await server.close();
+process.exitCode = passed === RUNS ? 0 : 1; // demo, but the exit code still reports pass/fail
