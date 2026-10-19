@@ -2,7 +2,9 @@
 
 Companion sample for **Chapter 6, §6.2.11 (Long-Running Operations and the Tasks Extension — The Model Integration Problem)**.
 
-Chat-model APIs require every tool call to be immediately followed by its result, so when an operation outlives the model turn, the host synthesizes an immediate "operation started" result to unblock the model. When the *real* result arrives seconds or hours later, it has nowhere natural to go — this sample demonstrates the four known injection strategies side by side and prints the exact conversation-history shape each produces.
+Most chat-model APIs require every tool call to be immediately followed by its result, so when an operation outlives the model turn, the host synthesizes an immediate "operation started" result to unblock the model. When the *real* result arrives seconds or hours later, it has nowhere natural to go — this sample demonstrates the four common injection strategies side by side and prints the exact conversation-history shape each produces.
+
+The exception is new and provider-specific: OpenAI's Responses API offers asynchronous tool calls on recent models (`async: true` on the tool definition). The model keeps working while the call is pending, and you supply the output in a later request, matched by `call_id`. A multi-provider host can't build on that yet, so the sample assumes the common case.
 
 The demo server models the operation as ordinary tools (`start_report` returns a handle immediately; `get_report_result` reports `running` until the work completes). It stands in for a Tasks-extension task: with the extension the server would return a `CreateTaskResult` and the host would poll `tasks/get`, but the host-side injection problem is identical either way, so the tasks extension is deliberately not implemented here.
 

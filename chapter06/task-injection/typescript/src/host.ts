@@ -1,9 +1,9 @@
 // TaskInjectionHost — the model integration problem for long-running operations (§6.2.11).
 //
-// Chat-model APIs require every tool call to be immediately followed by its result, so when
+// Most chat-model APIs require every tool call to be immediately followed by its result, so when
 // an operation outlives the model turn the host synthesizes an immediate "started" result to
 // unblock the model. When the REAL result arrives later, it has nowhere natural to go. This
-// host demonstrates the four known injection strategies side by side and prints the exact
+// host demonstrates the four common injection strategies side by side and prints the exact
 // conversation-history shape each one produces.
 //
 // Usage: node dist/host.js [prepend|synthetic-turn|meta-tool|fresh-invocation|--all]
@@ -83,7 +83,7 @@ async function runScenario(strategy: string): Promise<[string, number, string]> 
 
     // Act 1 — the model calls start_report; the tool returns IMMEDIATELY with a handle.
     // That immediate "operation started" tool result is what keeps the conversation
-    // legal: the API would reject a history in which the tool call dangles unanswered.
+    // legal: most APIs would reject a history in which the tool call dangles unanswered.
     // The model acknowledges and the turn ends — with the real work still running.
     const operationId = await runModelTurn(chat, history, tools, mcp, completedOps);
     if (operationId == null) throw new Error('The model did not start the report operation.');
