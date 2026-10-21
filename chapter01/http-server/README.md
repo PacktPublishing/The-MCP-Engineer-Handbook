@@ -27,6 +27,16 @@ All three servers listen on loopback only and check the `Host` and `Origin` head
 
 Requests without an `Origin` header (the C# client, `curl`) pass, and so do requests from loopback origins such as the Inspector page at `http://127.0.0.1:6274`.
 
+## Tested with
+
+.NET SDK 10.0.101, Node.js 22.20.0, uv 0.5.9 (Python 3.12.8, pinned by `.python-version`), on 2026-10-21. Packages, pinned exactly in each project:
+
+| Language | Packages |
+|---|---|
+| C# | `ModelContextProtocol.AspNetCore` 2.0.0 (net10.0) |
+| Python | `mcp` 2.2.0 |
+| TypeScript | `@modelcontextprotocol/server` 2.2.0, `@modelcontextprotocol/node` 2.1.0, TypeScript 7.0.2 |
+
 ## Smoke test (HTTP)
 
 With a server running (adjust the path to `/mcp` for Python):
