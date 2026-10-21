@@ -7,7 +7,7 @@ IClientTransport clientTransport = new HttpClientTransport(new()
 {
     Endpoint = new Uri("http://localhost:5000")
 });
-await using var mcpClient = await McpClient.CreateAsync(clientTransport!);
+await using var mcpClient = await McpClient.CreateAsync(clientTransport);
 var tools = await mcpClient.ListToolsAsync();
 foreach (var tool in tools)
 {
@@ -36,16 +36,18 @@ while (true)
     }
     chatHistory.Add(new ChatMessage(ChatRole.User, userPrompt));
 
-    // Stream the AI response and add to chat history
+    // Stream the AI response, keeping every update: besides the text we
+    // display, the updates carry the tool calls and the tool results
     Console.WriteLine("AI Response:");
-    var response = "";
+    List<ChatResponseUpdate> updates = new();
     await foreach (ChatResponseUpdate item in
         chatClient.GetStreamingResponseAsync(chatHistory, new ChatOptions()
         { Tools = tools.Cast<AITool>().ToList() }))
     {
         Console.Write(item.Text);
-        response += item.Text;
+        updates.Add(item);
     }
-    chatHistory.Add(new ChatMessage(ChatRole.Assistant, response));
+    // Add the whole exchange (tool calls, tool results, and the answer)
+    chatHistory.AddMessages(updates);
     Console.WriteLine();
 }
