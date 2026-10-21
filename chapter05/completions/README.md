@@ -60,7 +60,7 @@ three return the same three values with `total: 3, hasMore: false`.
 
 ## Deviations from the printed extracts
 
-None. Both §5.3.3 extracts run verbatim against `mcp` 2.0.0: the server-side
+None. Both §5.3.3 extracts run verbatim against `mcp` 2.3.0: the server-side
 `@server.completion()` handler is reproduced unchanged in `python/server.py`,
 and the client call — including the `session` variable name and the
 `ref=`/`argument=` keywords — appears unchanged in `python/client.py`

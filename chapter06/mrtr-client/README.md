@@ -93,7 +93,7 @@ Raw wire smoke (same shape as the TS one):
 
 ## Python
 
-Demonstrates the **modern (2026-07-28) MRTR flow over stdio** with `mcp` 2.0.0. This pair negotiates 2026-07-28 over stdio: the client's default `mode="auto"` probes `server/discover`, and `server.run()` (stdio) serves both eras through `serve_dual_era_loop` — a modern opening gets the modern era. Same tools, same env vars.
+Demonstrates the **modern (2026-07-28) MRTR flow over stdio** with `mcp` 2.3.0. This pair negotiates 2026-07-28 over stdio: the client's default `mode="auto"` probes `server/discover`, and `server.run()` (stdio) serves both eras through `serve_dual_era_loop` — a modern opening gets the modern era. Same tools, same env vars.
 
 Where the Python SDK differs from TS:
 
