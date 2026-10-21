@@ -15,6 +15,16 @@ Note the logging setup in the C# project: on stdio, standard output belongs to t
 - **TypeScript:** `cd typescript && npm ci && npm run build && npm start`
   - In the Inspector: Command `node`, Arguments `<path-to>/typescript/dist/server.js`
 
+## Tested with
+
+.NET SDK 10.0.101, Node.js 22.20.0, uv 0.5.9 (Python 3.12.8, pinned by `.python-version`), on 2026-10-21. Packages, pinned exactly in each project:
+
+| Language | Packages |
+|---|---|
+| C# | `ModelContextProtocol` 2.0.0, `Microsoft.Extensions.Hosting` 10.0.9 (net10.0) |
+| Python | `mcp` 2.2.0 |
+| TypeScript | `@modelcontextprotocol/server` 2.2.0 (zod 4.6.6 via the lockfile), TypeScript 7.0.2 |
+
 ## Smoke test (stdio, handshake-less)
 
 Pipe these into the server process; all three languages serve the modern-era opening (the full `_meta` envelope is required — all three SDKs reject requests without `clientCapabilities` with error -32602):

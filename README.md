@@ -4,12 +4,12 @@ Code samples for the book, written against the **2026-07-28 MCP specification** 
 
 ## SDK pins
 
-Versions are pinned exactly. C# and Python are on the 2.0.0 GA. TypeScript moved to **2.2.0**: `@modelcontextprotocol/client` 2.0.0–2.1.x is affected by [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (the OAuth client could send credentials to an authorization server the MCP server names). No sample uses the OAuth client, but samples get copied; the server package moved with the client so the two stay in lockstep.
+Versions are pinned exactly. C# is on the 2.0.0 GA, and so is Python apart from the exceptions in the table. TypeScript moved to **2.2.0**: `@modelcontextprotocol/client` 2.0.0–2.1.x is affected by [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (the OAuth client could send credentials to an authorization server the MCP server names). No sample uses the OAuth client, but samples get copied; the server package moved with the client so the two stay in lockstep.
 
 | Language | Package | Version |
 |---|---|---|
 | C# | `ModelContextProtocol` (+ `.AspNetCore` where used; `.Extensions.Tasks` for the tasks extension) | `2.0.0` |
-| Python | `mcp` | `2.0.0` |
+| Python | `mcp` | `2.0.0`; `2.2.0` in `chapter01/` (2.0.0–2.1.x are affected by [GHSA-84m7-p3x7-pcfv](https://github.com/advisories/GHSA-84m7-p3x7-pcfv), unbounded session accumulation in the Streamable HTTP transport); `2.3.0` in `chapter12/agent-as-mcp` |
 | TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` (`@modelcontextprotocol/node` 2.1.0 for the Node HTTP adapter in `chapter01/http-server`) | `2.2.0` |
 
 Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. One sample temporarily pins a dependency to git rather than PyPI: `chapter12/agent-as-mcp` uses a Microsoft Agent Framework commit with mcp 2.x support until a release ships it — see its README. (It and `chapter07/health-dashboard` used to ride the v1 `mcp` line until their ecosystems adopted v2.)

@@ -22,5 +22,8 @@ def echo(message: str, uppercase: bool = False) -> str:
 
 
 if __name__ == "__main__":
-    # Serves the MCP endpoint at http://localhost:5000/mcp
-    server.run(transport="streamable-http", port=5000)
+    # Serves the MCP endpoint at http://localhost:5000/mcp: the Python SDK's
+    # default path is /mcp, where the C# and TypeScript samples serve the root.
+    # Bound to loopback only; on a loopback host the SDK also turns on its
+    # Host and Origin checks (DNS rebinding protection).
+    server.run(transport="streamable-http", host="127.0.0.1", port=5000)

@@ -13,7 +13,29 @@ Each server logs `echo tool called: …` to its console, so you can verify the t
 - **TypeScript:** `cd typescript && npm ci && npm run build && npm start`
   - MCP endpoint: `http://localhost:5000` (any path — the sample routes every request to the MCP handler)
 
-In the MCP Inspector, select the **Streamable HTTP** transport and enter the endpoint URI. The C# and TS servers serve modern (2026-07-28) requests statelessly and fall back to legacy per-request serving for 2025-era clients; Python is dual-era, locked per connection by the opening message.
+In the MCP Inspector, select the **Streamable HTTP** transport and enter the endpoint URI. Python is the odd one out: its SDK serves under `/mcp` by default, so `http://localhost:5000` (the URI the C# client and the TS/C# servers use) answers 404 there. The C# and TS servers serve modern (2026-07-28) requests statelessly and fall back to legacy per-request serving for 2025-era clients; Python is dual-era, locked per connection by the opening message.
+
+## Local-only by design
+
+All three servers listen on loopback only and check the `Host` and `Origin` headers, as the Streamable HTTP spec asks of local servers (bind to localhost; validate `Origin` and answer `403` when it is present and invalid). Binding and header checks solve different problems: binding keeps other machines out, while the header checks stop a web page in your own browser from reaching the server through DNS rebinding or a cross-site request.
+
+| Language | Bind | `Host` check | `Origin` check |
+|---|---|---|---|
+| C# | `UseUrls("http://localhost:5000")` (127.0.0.1 and [::1]) | `HostFilteringOptions.AllowedHosts` (Kestrel accepts any host by default) | small middleware in `Program.cs` (the C# SDK has none built in) |
+| Python | `host="127.0.0.1"` (also the SDK default) | built in: on by default for a loopback host (421) | built in (403) |
+| TypeScript | `listen(5000, '127.0.0.1')` (Node binds every interface without a host) | `localhostHostValidation()` from `@modelcontextprotocol/node` | `localhostOriginValidation()` from `@modelcontextprotocol/node` (`createMcpHandler` itself does no validation) |
+
+Requests without an `Origin` header (the C# client, `curl`) pass, and so do requests from loopback origins such as the Inspector page at `http://127.0.0.1:6274`.
+
+## Tested with
+
+.NET SDK 10.0.101, Node.js 22.20.0, uv 0.5.9 (Python 3.12.8, pinned by `.python-version`), on 2026-10-21. Packages, pinned exactly in each project:
+
+| Language | Packages |
+|---|---|
+| C# | `ModelContextProtocol.AspNetCore` 2.0.0 (net10.0) |
+| Python | `mcp` 2.2.0 |
+| TypeScript | `@modelcontextprotocol/server` 2.2.0, `@modelcontextprotocol/node` 2.1.0, TypeScript 7.0.2 |
 
 ## Smoke test (HTTP)
 
