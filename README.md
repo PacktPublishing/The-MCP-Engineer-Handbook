@@ -1,16 +1,21 @@
 # The MCP Engineering Handbook — Companion Samples
 
-Code samples for the book, written against the **2026-07-28 MCP specification** using the v2 GA SDKs. Every project was rebuilt and smoke-tested on the GA releases (2026-08-19); the TypeScript projects were re-run on 2.2.0 (2026-10-12).
+Code samples for the book, written against the **2026-07-28 MCP specification** using the v2 GA SDKs. Every project was rebuilt and smoke-tested on the GA releases (2026-08-19); the TypeScript and Python projects were re-run on the security releases below (TypeScript 2.3.1, Python 2.3.0) on 2026-10-21.
 
 ## SDK pins
 
-Versions are pinned exactly. C# is on the 2.0.0 GA, and so is Python apart from the exceptions in the table. TypeScript moved to **2.2.0**: `@modelcontextprotocol/client` 2.0.0–2.1.x is affected by [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (the OAuth client could send credentials to an authorization server the MCP server names). No sample uses the OAuth client, but samples get copied; the server package moved with the client so the two stay in lockstep.
+Versions are pinned exactly. C# is on the 2.0.0 GA; no advisory has been published against it. Python and TypeScript moved past their GA releases to clear security advisories. Samples get copied, so every project is on a fixed release even where the sample doesn't use the affected feature.
+
+- **Python `mcp` 2.3.0.** 2.0.0–2.1.x are affected by [GHSA-84m7-p3x7-pcfv](https://github.com/advisories/GHSA-84m7-p3x7-pcfv) (unbounded session accumulation in the Streamable HTTP transport), fixed in 2.2.0. 2.3.0 is the latest release.
+- **TypeScript 2.3.1.** `@modelcontextprotocol/server` 2.0.0–2.2.x is affected by [GHSA-jm63-cq47-j5jp](https://github.com/advisories/GHSA-jm63-cq47-j5jp) (shared transport or server instances delivered one HTTP client's messages to another), [GHSA-46jr-4wx8-v453](https://github.com/advisories/GHSA-46jr-4wx8-v453) (one HTTP request within the default size limit could exhaust server memory during validation) and [GHSA-rvq5-wwqv-78pq](https://github.com/advisories/GHSA-rvq5-wwqv-78pq) (bearer authentication accepted tokens issued for another service). `@modelcontextprotocol/client` 2.0.0–2.2.x is affected by [GHSA-6prh-2h8m-c8cw](https://github.com/advisories/GHSA-6prh-2h8m-c8cw) (HTTP transports and OAuth requests followed cross-origin redirects), and 2.0.0–2.1.x also by [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) (the OAuth client could send credentials to an authorization server the MCP server names). All are fixed in 2.3.0; 2.3.1 is the latest release. The server, client and core packages move in lockstep.
+
+Since 2.3.0, a TypeScript `McpServer` serves one connection at a time, so a server object shared across HTTP requests or sessions now fails instead of serving them. The samples already build a server per connection by passing a factory to `serveStdio` or `createMcpHandler`; do the same in code you copy from them.
 
 | Language | Package | Version |
 |---|---|---|
 | C# | `ModelContextProtocol` (+ `.AspNetCore` where used; `.Extensions.Tasks` for the tasks extension) | `2.0.0` |
-| Python | `mcp` | `2.0.0`; `2.2.0` in `chapter01/` (2.0.0–2.1.x are affected by [GHSA-84m7-p3x7-pcfv](https://github.com/advisories/GHSA-84m7-p3x7-pcfv), unbounded session accumulation in the Streamable HTTP transport); `2.3.0` in `chapter12/agent-as-mcp` |
-| TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` (`@modelcontextprotocol/node` 2.1.0 for the Node HTTP adapter in `chapter01/http-server`) | `2.2.0` |
+| Python | `mcp` | `2.3.0` |
+| TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` (`chapter07/health-dashboard` also pins `@modelcontextprotocol/core` 2.3.1 and `@modelcontextprotocol/ext-apps` 2.0.3; `chapter01/http-server` uses `@modelcontextprotocol/node` 2.1.1 for the Node HTTP adapter) | `2.3.1` |
 
 Do **not** use the v1 TypeScript monolith (`@modelcontextprotocol/sdk`) — v2 ships as the two packages above. One sample temporarily pins a dependency to git rather than PyPI: `chapter12/agent-as-mcp` uses a Microsoft Agent Framework commit with mcp 2.x support until a release ships it — see its README. (It and `chapter07/health-dashboard` used to ride the v1 `mcp` line until their ecosystems adopted v2.)
 

@@ -22,8 +22,8 @@ Note the logging setup in the C# project: on stdio, standard output belongs to t
 | Language | Packages |
 |---|---|
 | C# | `ModelContextProtocol` 2.0.0, `Microsoft.Extensions.Hosting` 10.0.9 (net10.0) |
-| Python | `mcp` 2.2.0 |
-| TypeScript | `@modelcontextprotocol/server` 2.2.0 (zod 4.6.6 via the lockfile), TypeScript 7.0.2 |
+| Python | `mcp` 2.3.0 |
+| TypeScript | `@modelcontextprotocol/server` 2.3.1 (zod 4.6.7 via the lockfile), TypeScript 7.0.2 |
 
 ## Smoke test (stdio, handshake-less)
 

@@ -18,7 +18,7 @@ This sample is **TypeScript-only by design**: the MCP Apps SDK
 
 ## Versions
 
-Pinned like the rest of the repo: `@modelcontextprotocol/server`, `client` and `core` **2.2.0**
+Pinned like the rest of the repo: `@modelcontextprotocol/server`, `client` and `core` **2.3.1**
 (exact) and `@modelcontextprotocol/ext-apps` **2.0.3** (exact), with `zod ^4.2.0`.
 ext-apps 2.x is the first release line built on the v2 SDK packages (released 2026-09-08);
 until then this sample had to stay on the v1 SDK, which is the extension-ecosystem skew

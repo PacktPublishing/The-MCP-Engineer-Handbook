@@ -59,7 +59,7 @@ cd ../../model-resource-client/typescript && npm ci && npm run build
 npm start
 ```
 
-The TS host spawns two instances of `demo-resource-server/typescript/dist/server.js` as stdio children (`DEMO_RESOURCE_SERVER_JS` overrides the path); each pair negotiates the modern **2026-07-28** era via `versionNegotiation: { mode: 'auto' }` (still required at 2.2.0 — the TS client defaults to the legacy posture) and the host prints the negotiated version. `ClientManager` holds one `Client` per host-assigned label. The wrapper tools, the `OriginPolicy`, the scripted model's routing, and the printed history match the C# output (same smoke criteria).
+The TS host spawns two instances of `demo-resource-server/typescript/dist/server.js` as stdio children (`DEMO_RESOURCE_SERVER_JS` overrides the path); each pair negotiates the modern **2026-07-28** era via `versionNegotiation: { mode: 'auto' }` (still required at 2.3.1 — the TS client defaults to the legacy posture) and the host prints the negotiated version. `ClientManager` holds one `Client` per host-assigned label. The wrapper tools, the `OriginPolicy`, the scripted model's routing, and the printed history match the C# output (same smoke criteria).
 
 ## Deviations from the printed extracts
 
