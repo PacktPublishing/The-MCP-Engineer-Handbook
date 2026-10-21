@@ -27,7 +27,7 @@ Note the logging setup in the C# project: on stdio, standard output belongs to t
 
 ## Smoke test (stdio, handshake-less)
 
-Pipe these into the server process; all three languages serve the modern-era opening (the full `_meta` envelope is required — all three SDKs reject requests without `clientCapabilities` with error -32602):
+Pipe these into the server process; all three languages serve the modern-era opening (`protocolVersion` and `clientCapabilities` are required in `_meta`, and all three SDKs reject a request without them with error -32602; `clientInfo` is recommended but optional):
 
 ```
 {"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/clientInfo":{"name":"smoke-test","version":"0.0.1"},"io.modelcontextprotocol/clientCapabilities":{},"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}
