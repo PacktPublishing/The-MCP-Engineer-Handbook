@@ -24,7 +24,7 @@ Result texts follow the chapter's result-shaping guidance: every result states p
 
 ## Smoke test (stdio)
 
-Pipe requests into the server process (or type them interactively). All three servers accept the handshake-less 2026-07-28 requests as shown below (the full `_meta` envelope is required — all three SDKs reject a missing `clientCapabilities` with `-32602`). The Python stdio server is dual-era, locked per connection by the opening message; to exercise its legacy era instead, open with the classic handshake first — and then drop the `_meta` envelope from the requests that follow (a handshake-opened connection rejects the 2026-07-28 envelope with `-32600`):
+Pipe requests into the server process (or type them interactively). All three servers accept the handshake-less 2026-07-28 requests as shown below (`protocolVersion` and `clientCapabilities` are required in `_meta`, and all three SDKs reject a request without them with `-32602`; `clientInfo` is recommended but optional). The Python stdio server is dual-era, locked per connection by the opening message; to exercise its legacy era instead, open with the classic handshake first — and then drop the `_meta` envelope from the requests that follow (a handshake-opened connection rejects the 2026-07-28 envelope with `-32600`):
 
 ```
 {"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"smoke","version":"0"}}}
