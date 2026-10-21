@@ -62,7 +62,7 @@ Smoke (raw wire, handshake-less modern request — shows the `input_required` re
 
 ## C\#
 
-Demonstrates the **modern (2026-07-28) MRTR flow over stdio**, both directions native to `ModelContextProtocol` 2.0.0. Same tools, same env vars; two projects (`DemoServer`, `MrtrClient`).
+Demonstrates the **modern (2026-07-28) MRTR flow over stdio**, both directions native to `ModelContextProtocol` 2.3.0 (unchanged since 2.0.0). Same tools, same env vars; two projects (`DemoServer`, `MrtrClient`).
 
 Where the C# SDK differs from TS:
 

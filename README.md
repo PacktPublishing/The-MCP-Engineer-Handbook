@@ -85,11 +85,12 @@ Versions are pinned exactly, and every project was rebuilt and smoke-tested on t
 
 | Language | Package | Version |
 |---|---|---|
-| C# | `ModelContextProtocol` (plus `.AspNetCore` where used, and `.Extensions.Tasks` for the Tasks extension) | 2.0.0 |
+| C# | `ModelContextProtocol` (plus `.AspNetCore` where used, and `.Extensions.Tasks` for the Tasks extension) | 2.3.0 |
 | Python | `mcp` | 2.3.0 |
 | TypeScript | `@modelcontextprotocol/server`, `@modelcontextprotocol/client` (and `core` where pinned) | 2.3.1 |
 
 Exceptions and extras:
+- C# projects that reference Microsoft.Extensions.AI packages directly pin 10.11.0, the version `ModelContextProtocol` 2.3.0 depends on (an older direct pin fails restore with NU1605).
 - `chapter01/http-server` (TypeScript) uses `@modelcontextprotocol/node` 2.1.1 for the Node HTTP adapter.
 - `chapter07/health-dashboard` pins `@modelcontextprotocol/ext-apps` 2.0.3.
 - `chapter12/agent-as-mcp` pins Microsoft Agent Framework to a git commit, because the latest release on PyPI still requires the v1 `mcp` package. Its README has the details.
@@ -98,7 +99,7 @@ Use the v2 TypeScript packages above, not the v1 monolith (`@modelcontextprotoco
 
 ### Why these versions
 
-C# is on the 2.0.0 GA release; no advisory has been published against it. Python and TypeScript moved past their GA releases to clear security advisories. Samples get copied into real projects, so every sample is on a fixed release, even where it doesn't use the affected feature.
+Python and TypeScript moved past their GA releases to clear security advisories. C# is on its latest release, 2.3.0; no advisory has been published against any C# 2.x release, and the C# code printed in the book is unchanged on it. Samples get copied into real projects, so every sample is on a fixed release, even where it doesn't use the affected feature.
 
 - **Python `mcp`:** 2.0.0–2.1.x are affected by [GHSA-84m7-p3x7-pcfv](https://github.com/advisories/GHSA-84m7-p3x7-pcfv) (unbounded session accumulation in the Streamable HTTP transport), fixed in 2.2.0.
 - **TypeScript:** fixed in 2.3.0.
@@ -110,6 +111,8 @@ C# is on the 2.0.0 GA release; no advisory has been published against it. Python
   - `@modelcontextprotocol/client` 2.0.0–2.1.x is also affected by [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h): the OAuth client could send credentials to an authorization server the MCP server names.
 
 Since 2.3.0, a TypeScript `McpServer` serves one connection at a time, so a server object shared across HTTP requests or sessions now fails instead of serving them. The samples create a server per connection by passing a factory to `serveStdio` or `createMcpHandler`; do the same in code you copy from them.
+
+Two C# differences from 2.0.0 show up in the samples. Tools, prompts and resources now list in registration order (some samples still carry a `tools/list` ordering filter from when they came back in hash order; it's now redundant but harmless). And a modern `server/discover` result no longer advertises the deprecated `logging` capability; a legacy `initialize` result still does.
 
 ## SDK behavior notes
 

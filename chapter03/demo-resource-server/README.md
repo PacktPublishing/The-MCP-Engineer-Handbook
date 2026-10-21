@@ -12,7 +12,7 @@ What it exposes:
   - `file://exports/{quarter}/telemetry.csv` takes **3 seconds** to read, for client deadlines.
 - **Resource templates** (§3.4.1): the book's `file://user/{id}/preferences.md` extract, plus `doc_search`, an RFC 6570 level-4 template (`docs://search{?tags*,limit}`; level-3 `{?tags,limit}` in Python) kept as a record of what each SDK does with it.
 
-All three ports list tools, resources and templates in declaration order, so every client sees the same stable catalog (and "the first resource" is always `user_guide`). Python and TypeScript do this by default. At 2.0.0 the C# SDK stores registered primitives in a hash-keyed dictionary, so its lists come back in hash order. For tools that order is stable but arbitrary. Resources and templates are keyed with a comparer whose hash .NET randomizes per process, so their order changes on every run. The C# server therefore adds `tools/list`, `resources/list` and `resources/templates/list` filters that sort them back into declaration order.
+All three ports list tools, resources and templates in declaration order, so every client sees the same stable catalog (and "the first resource" is always `user_guide`). Python and TypeScript do this by default. C# SDK releases before 2.3.0 store registered primitives in a hash-keyed dictionary, so their lists come back in hash order. For tools that order is stable but arbitrary. Resources and templates are keyed with a comparer whose hash .NET randomizes per process, so their order changes on every run. The C# server therefore adds `tools/list`, `resources/list` and `resources/templates/list` filters that sort them back into declaration order. The pinned 2.3.0 preserves registration order itself, so the filters are now redundant; they stay so the sample behaves the same on older releases.
 
 ## URI-template compatibility (pinned SDKs)
 
@@ -21,7 +21,7 @@ Two different things hide behind "supports RFC 6570":
 - **Expansion** is what the RFC defines: which URI a template produces for given variable values. That is the client's side of the contract.
 - **Matching and binding** is what a server SDK does with an incoming URI: decide whether it matches a registered template, then turn the URI back into variable values for your handler. RFC 6570 doesn't define this reverse direction, and the SDKs differ.
 
-Don't assume an SDK matches every expansion of every level. The tables below are observed, not inferred. Each row was produced by sending `resources/read` over stdio to servers pinned at **`ModelContextProtocol` 2.0.0** (C#), **`mcp` 2.3.0** (Python), and **`@modelcontextprotocol/server` 2.3.1** (TypeScript). The Python and TypeScript rows were first produced at 2.0.0; every one was re-run at the current pins and is unchanged.
+Don't assume an SDK matches every expansion of every level. The tables below are observed, not inferred. Each row was produced by sending `resources/read` over stdio to servers pinned at **`ModelContextProtocol` 2.3.0** (C#), **`mcp` 2.3.0** (Python), and **`@modelcontextprotocol/server` 2.3.1** (TypeScript). Every row was first produced at 2.0.0; the rows were re-run at the current pins and are unchanged (the C# SDK's URI-template matcher is the same code in 2.0.0 and 2.3.0).
 
 ### The sample's own templates
 

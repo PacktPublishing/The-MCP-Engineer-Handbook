@@ -13,10 +13,10 @@ Companion sample for **Chapter 1, §1.8 (Wiring Models to MCP)** — the C# MCP 
 
 | Package | Version |
 |---|---|
-| `ModelContextProtocol` | 2.0.0 |
-| `Microsoft.Extensions.AI` | 10.7.0 |
+| `ModelContextProtocol` | 2.3.0 |
+| `Microsoft.Extensions.AI` | 10.11.0 |
 | `OllamaSharp` | 5.4.8 |
-| `Anthropic`, `Microsoft.Extensions.AI.OpenAI` (alternatives only) | 12.33.0, 10.7.0 |
+| `Anthropic`, `Microsoft.Extensions.AI.OpenAI` (alternatives only) | 12.33.0, 10.11.0 |
 
 The model side was checked live with Ollama 0.12.7 and `qwen3:1.7b`.
 

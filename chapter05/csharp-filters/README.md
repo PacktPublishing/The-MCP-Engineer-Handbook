@@ -38,7 +38,7 @@ dotnet run
 ## Smoke test
 
 Requests are stateless 2026-07-28 era — no `initialize` handshake needed.
-At 2.0.0 GA the C# SDK validates the `_meta` envelope strictly (the preview-era
+Since the 2.0.0 GA the C# SDK validates the `_meta` envelope strictly (the preview-era
 leniency is gone): omit `io.modelcontextprotocol/clientCapabilities` and the
 server rejects the request with `-32602`. Substitute your port for `5000`.
 
