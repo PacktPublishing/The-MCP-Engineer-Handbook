@@ -12,7 +12,7 @@ to, not an SDK feature you configure.
 
 ## The SDK's telemetry names
 
-Verified against `ModelContextProtocol.Core` 2.0.0 (GA). Both the
+Verified against `ModelContextProtocol.Core` 2.0.0 (GA) and 2.3.0. Both the
 `ActivitySource` and the `Meter` are named:
 
 ```
@@ -20,7 +20,7 @@ Experimental.ModelContextProtocol
 ```
 
 (The `Experimental.` prefix is .NET's convention for telemetry names whose
-shape may still change; the MCP SDK kept it at 2.0.0 GA — the console
+shape may still change; the MCP SDK kept it at the 2.0.0 GA and still has it at 2.3.0 — the console
 exporter prints `Instrumentation scope: Experimental.ModelContextProtocol`
 for both spans and metrics.) Registration is two lines:
 

@@ -12,7 +12,7 @@ The paired-pipe wiring here exercises the whole protocol stack but not the HTTP 
 
 ## The in-memory transport APIs (verified, both SDKs)
 
-**C# (`ModelContextProtocol` 2.0.0)** — there is no dedicated "in-memory transport" type; the seam is the *stream* transport pair, wired to two `System.IO.Pipelines.Pipe` instances (one per direction):
+**C# (`ModelContextProtocol` 2.3.0)** — there is no dedicated "in-memory transport" type; the seam is the *stream* transport pair, wired to two `System.IO.Pipelines.Pipe` instances (one per direction):
 
 ```csharp
 var clientToServer = new Pipe();
@@ -42,7 +42,7 @@ typescript/           minimal counterpart: server + client over InMemoryTranspor
 
 The C# implementation is canonical; the TypeScript project is deliberately tiny — it exists to demonstrate the linked-pair API.
 
-Both C# hosts register `DocsTools` with a `tools/list` filter (`ToolOrder.cs`) that restores declaration order: the C# SDK 2.0.0 lists tools in hash order (stable across runs, but not declaration order), and the tool order is part of what the model sees.
+Both C# hosts register `DocsTools` with a `tools/list` filter (`ToolOrder.cs`) that restores declaration order: C# SDK releases before 2.3.0 list tools in hash order (stable across runs, but not declaration order), and the tool order is part of what the model sees. The pinned 2.3.0 lists them in registration order, so the filter is now redundant; it keeps older releases consistent.
 
 ## Run (C#)
 

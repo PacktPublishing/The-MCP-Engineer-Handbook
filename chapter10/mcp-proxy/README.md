@@ -36,7 +36,7 @@ must echo the request `id`, so the proxy parses the envelope there — and only
 there. That is Section 10.4.3's point about body awareness: when you finally
 need it, it's one well-specified envelope.
 
-Verified against `ModelContextProtocol.AspNetCore` 2.0.0 (GA): the
+Verified against `ModelContextProtocol.AspNetCore` 2.0.0 (GA) and 2.3.0: the
 header contract is enforced server-side. On modern-era requests
 (`MCP-Protocol-Version: 2026-07-28`) a missing `Mcp-Method`, or a header that
 disagrees with the body, gets HTTP 400 with JSON-RPC error `-32020` from the

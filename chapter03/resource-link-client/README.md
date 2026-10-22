@@ -66,7 +66,7 @@ Per **pass** (one tool result, including every chain it starts), these limits ap
 
 The first three are **pass limits**: once one trips, the pass stops reading. The link that tripped it gets its own notice if it was actually read (an over-budget read, a cancelled read); every link after that is covered by a single summary notice naming the limit, the count, and the first three URIs. Repeats work the same way: the first repeat of a URI gets a note, later ones are only counted. So the notices are bounded too: at most one per link handled (up to `MaxLinks`, plus chain hops), plus at most two summaries — 1 000 links cost one notice, not 996.
 
-Not bounded by the resolver: what the transport receives. `ReadResourceAsync` / `read_resource` / `readResource` return a fully materialized response, so the size checks limit what reaches the *model*, not what the client buffers. At the pinned SDKs (C# 2.0.0, Python 2.3.0, TypeScript 2.3.1) the C# and Python stdio transports put no cap on message size; the TypeScript stdio transport caps its read buffer at 10 MiB by default (`maxBufferSize`) and errors beyond that. Bounding received bytes needs a transport-level limit.
+Not bounded by the resolver: what the transport receives. `ReadResourceAsync` / `read_resource` / `readResource` return a fully materialized response, so the size checks limit what reaches the *model*, not what the client buffers. At the pinned SDKs (C# 2.3.0, Python 2.3.0, TypeScript 2.3.1) the C# and Python stdio transports put no cap on message size; the TypeScript stdio transport caps its read buffer at 10 MiB by default (`maxBufferSize`) and errors beyond that. Bounding received bytes needs a transport-level limit.
 
 ### Cycles vs. duplicates
 
@@ -109,7 +109,7 @@ The TS client spawns `demo-resource-server/typescript/dist/server.js` as a stdio
 
 ## Deviations from the printed extracts
 
-Written against `ModelContextProtocol` 2.0.0, the C# extract matches the sample: the parameter is typed `McpClient` (a concrete class at 2.0.0; there is no `IMcpClient`), and the contents-to-block conversion goes through Microsoft.Extensions.AI, `c.ToAIContent().ToContentBlock()` (text contents → `TextContentBlock`, blobs → image/audio blocks by MIME type), because `ResourceContents` has no `ToContentBlock()` of its own.
+Written against `ModelContextProtocol` 2.0.0 and unchanged at the pinned 2.3.0, the C# extract matches the sample: the parameter is typed `McpClient` (a concrete class; there is no `IMcpClient`), and the contents-to-block conversion goes through Microsoft.Extensions.AI, `c.ToAIContent().ToContentBlock()` (text contents → `TextContentBlock`, blobs → image/audio blocks by MIME type), because `ResourceContents` has no `ToContentBlock()` of its own.
 
 Python (`mcp` 2.3.0):
 

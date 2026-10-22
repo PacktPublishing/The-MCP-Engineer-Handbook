@@ -19,8 +19,9 @@ host won't poll on its own); push is a research preview, not a standard.
   batch, `{"messages":[{"id","from","text"}],"rejected":[...]}`: the message ID is the
   inbox line number, and `rejected` lists malformed inbox lines. The unread-cursor lives in
   process memory: a channel is a stdio server, and the process *is* the stream position
-  (ch10's stdio-affinity point). A `tools/list` filter restores declaration order: the C#
-  SDK 2.0.0 lists tools in hash order (stable, but `reply` before `check_messages`).
+  (ch10's stdio-affinity point). A `tools/list` filter restores declaration order: C# SDK
+  releases before 2.3.0 list tools in hash order (stable, but `reply` before `check_messages`);
+  the pinned 2.3.0 keeps registration order, so the filter is now redundant.
 - `csharp/Chat/` — the user's "phone": a console app that appends to the inbox file and
   tails the outbox. Knows nothing about MCP.
 - `csharp/ChannelHost/` — a minimal harness: owns the loop (poll every 2s, one model turn
@@ -125,7 +126,9 @@ a local Ollama model doesn't.
 **Verified 2026-08-19 (GA pass, ModelContextProtocol 2.0.0)**: scripted path end-to-end,
 and the same run against a real model
 (`gpt-4.1-mini`) — the model answered the user exclusively through the `reply` tool, as
-the system prompt demands ("plain output goes nowhere").
+the system prompt demands ("plain output goes nowhere"). Re-run 2026-10-21 at
+ModelContextProtocol 2.3.0 and Microsoft.Extensions.AI 10.11.0, scripted and against
+`gpt-4.1-mini`, with the same results.
 
 **Re-verified 2026-10-19 (structured batch and harness policy)**, scripted and against a
 local fake OpenAI-compatible endpoint that logs requests: an inbox message "Why does my app

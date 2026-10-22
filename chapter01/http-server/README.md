@@ -33,7 +33,7 @@ Requests without an `Origin` header (the C# client, `curl`) pass, and so do requ
 
 | Language | Packages |
 |---|---|
-| C# | `ModelContextProtocol.AspNetCore` 2.0.0 (net10.0) |
+| C# | `ModelContextProtocol.AspNetCore` 2.3.0 (net10.0) |
 | Python | `mcp` 2.3.0 |
 | TypeScript | `@modelcontextprotocol/server` 2.3.1, `@modelcontextprotocol/node` 2.1.1, TypeScript 7.0.2 |
 

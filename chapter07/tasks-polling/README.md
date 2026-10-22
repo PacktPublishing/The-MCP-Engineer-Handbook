@@ -2,7 +2,7 @@
 
 Companion sample for **Chapter 7, §7.3 (The Tasks Extension)** — a minimal C# demo of the client-side task methods.
 
-At the 2.0.0 GA the tasks support lives in its own package, **`ModelContextProtocol.Extensions.Tasks`** (2.0.0, referenced alongside `ModelContextProtocol` by both projects) — the extension versions separately from the core SDK, mirroring how the protocol extension itself is optional.
+At the 2.0.0 GA the tasks support lives in its own package, **`ModelContextProtocol.Extensions.Tasks`** (pinned at 2.3.0, referenced alongside `ModelContextProtocol` by both projects) — the extension versions separately from the core SDK, mirroring how the protocol extension itself is optional.
 
 The server (`csharp/`) has one slow tool, `generate_report`. Its entire tasks opt-in is one line: `.WithTasks(new InMemoryMcpTaskStore { ... })` on the server builder makes the SDK declare `io.modelcontextprotocol/tasks`, serve `tasks/get`/`tasks/update`/`tasks/cancel` from the store, and answer task-declaring clients with `resultType: "task"` while the tool runs in the background; `tasks/cancel` surfaces as the tool's `CancellationToken`.
 

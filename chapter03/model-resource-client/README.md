@@ -63,4 +63,4 @@ The TS host spawns two instances of `demo-resource-server/typescript/dist/server
 
 ## Deviations from the printed extracts
 
-The `ListResources`/`ReadResource` methods in `ResourceTools.cs` compile against `ModelContextProtocol` 2.0.0. `ReadResource` includes the `OriginPolicy` check described above, and `ResourceTools` takes the policy as a second constructor argument. The sample supplies the pieces the extract elides (`ClientManager`, `OriginPolicy`, `ResourceMetadata`, `FormatResourceMetadata`, `FormatResourceContent`).
+The `ListResources`/`ReadResource` methods in `ResourceTools.cs` compile against `ModelContextProtocol` 2.3.0. `ReadResource` includes the `OriginPolicy` check described above, and `ResourceTools` takes the policy as a second constructor argument. The sample supplies the pieces the extract elides (`ClientManager`, `OriginPolicy`, `ResourceMetadata`, `FormatResourceMetadata`, `FormatResourceContent`).

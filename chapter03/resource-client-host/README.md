@@ -81,6 +81,6 @@ The TS host spawns `demo-resource-server/typescript/dist/server.js` as a stdio c
 
 ## Deviations from the printed extracts
 
-Written against `ModelContextProtocol` 2.0.0, the system and hybrid extracts match the sample: both inject `approvedRead`, the read the user previewed and approved, and convert its contents with the SDK's `ToAIContents()` in a loop. The one deliberate difference is escaping. The book leaves it out of the listings for brevity (and says so); the sample escapes every server-supplied value it places inside the host's tags (`Xml.Escape`, and `ToEscapedAIContents` in place of `ToAIContents`).
+Written against `ModelContextProtocol` 2.0.0 and unchanged at the pinned 2.3.0, the system and hybrid extracts match the sample: both inject `approvedRead`, the read the user previewed and approved, and convert its contents with the SDK's `ToAIContents()` in a loop. The one deliberate difference is escaping. The book leaves it out of the listings for brevity (and says so); the sample escapes every server-supplied value it places inside the host's tags (`Xml.Escape`, and `ToEscapedAIContents` in place of `ToAIContents`).
 
 TypeScript (`@modelcontextprotocol/client` 2.3.1): the chat abstraction is a plain part list, but the conversion step `ToAIContents()` does in C# remains — read contents are not message parts, so `host.ts` maps them in `toParts`, discriminating text from blob structurally (`'text' in c`).

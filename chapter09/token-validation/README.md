@@ -42,7 +42,7 @@ ASP.NET Core). Nothing else in the sample changes — the audience check, the
 scope checks (the `403` challenge and the filter behind it), and the metadata
 document are the parts you keep.
 
-`ModelContextProtocol.AspNetCore` 2.0.0 also ships production
+`ModelContextProtocol.AspNetCore` (2.0.0 and later) also ships production
 wiring for two of the three layers shown hand-rolled here:
 `McpAuthenticationHandler` (registered via
 `.AddAuthentication(...).AddMcp(...)`) serves the RFC 9728 document and adds
